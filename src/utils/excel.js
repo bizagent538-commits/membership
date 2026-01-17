@@ -129,6 +129,7 @@ export function parseImportedExcel(file) {
           else if (tierLower.includes('absentee')) normalizedTier = 'Absentee';
           else if (tierLower.includes('life')) normalizedTier = 'Life';
           else if (tierLower.includes('honorary')) normalizedTier = 'Honorary';
+          else if (tierLower.includes('waitlist') || tierLower.includes('wait list')) normalizedTier = 'Waitlist';
           
           // Normalize status
           let normalizedStatus = status;
@@ -198,7 +199,7 @@ export function validateImportedMembers(members) {
     if (!member.original_join_date) rowErrors.push('Missing or invalid join date');
     
     // Validate tier
-    if (!['Regular', 'Absentee', 'Life', 'Honorary'].includes(member.tier)) {
+    if (!['Regular', 'Absentee', 'Life', 'Honorary', 'Waitlist'].includes(member.tier)) {
       rowErrors.push(`Invalid tier: ${member.tier}`);
     }
     
@@ -239,7 +240,7 @@ export function generateImportTemplate() {
     'last_name': 'Smith',
     'date_of_birth': '03/15/1962',
     'original_join_date': '07/01/2015',
-    'tier': 'Regular',
+    'tier': 'Regular (or Absentee, Life, Honorary, Waitlist)',
     'status': 'Active',
     'email': 'john@example.com',
     'phone': '860-555-1234',
