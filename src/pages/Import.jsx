@@ -134,7 +134,7 @@ export default function Import() {
             <li><strong>first_name</strong>, <strong>last_name</strong> - Member name</li>
             <li><strong>date_of_birth</strong> - Date format (MM/DD/YYYY)</li>
             <li><strong>original_join_date</strong> - Date format (MM/DD/YYYY)</li>
-            <li><strong>tier</strong> - Regular, Absentee, Life, or Honorary</li>
+            <li><strong>tier</strong> - Regular, Absentee, Life, Honorary, or Waitlist</li>
             <li><strong>status</strong> - Active, Deceased, Resigned, or Expelled</li>
           </ul>
           <p style={{ color: '#6b7280' }}>
