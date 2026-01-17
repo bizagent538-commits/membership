@@ -217,6 +217,7 @@ export default function MemberForm() {
                   <option value="Absentee">Absentee</option>
                   <option value="Life">Life</option>
                   <option value="Honorary">Honorary</option>
+                  <option value="Waitlist">Waitlist</option>
                 </select>
               </div>
               <div className="form-group">
