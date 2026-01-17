@@ -606,19 +606,17 @@ export default function MemberDetail() {
         </div>
       )}
       606       </div>
-607     )}
-608
-609     {/* Audit History */}
-610     <div style={{ marginTop: '24px' }}>
-611       <AuditHistory 
-612         memberId={member.id} 
-613         memberName={`${member.first_name} ${member.last_name}`} 
-614       />
-615     </div>
-616
-617   </div>
-618   );
-619 }
+    )}
+     {/* Audit History */}
+     <div style={{ marginTop: '24px' }}>
+      <AuditHistory 
+        memberId={member.id} 
+        memberName={`${member.first_name} ${member.last_name}`} 
+      />
+   </div>
+   </div>
+   );
+ }
     </div>
   );
 }
