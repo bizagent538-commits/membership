@@ -71,6 +71,7 @@ export default function MemberDetail() {
       case 'Honorary': return 'badge-info';
       case 'Regular': return 'badge-gray';
       case 'Absentee': return 'badge-warning';
+      case 'Waitlist': return 'badge-waitlist';
       default: return 'badge-gray';
     }
   };
@@ -275,6 +276,32 @@ export default function MemberDetail() {
           </div>
         </div>
 
+        {/* Waitlist Info - Only show for Waitlist tier */}
+        {member.tier === 'Waitlist' && (
+          <div className="detail-section">
+            <h3>Waitlist Information</h3>
+            <div className="detail-row">
+              <span className="detail-label">Position</span>
+              <span className="detail-value" style={{ fontSize: '1.25em', fontWeight: 'bold', color: '#4f46e5' }}>
+                #{member.waitlist_position}
+              </span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Date Added</span>
+              <span className="detail-value">{formatDate(member.waitlist_date)}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Days Waiting</span>
+              <span className="detail-value">
+                {member.waitlist_date 
+                  ? Math.floor((new Date() - new Date(member.waitlist_date)) / (1000 * 60 * 60 * 24))
+                  : '—'
+                } days
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Current Billing (for Regular/Absentee) */}
         {(member.tier === 'Regular' || member.tier === 'Absentee') && member.status === 'Active' && (
           <div className="detail-section">
@@ -442,6 +469,14 @@ export default function MemberDetail() {
         </div>
       </div>
 
+      {/* Audit History */}
+      <div style={{ marginTop: '24px' }}>
+        <AuditHistory 
+          memberId={member.id} 
+          memberName={`${member.first_name} ${member.last_name}`} 
+        />
+      </div>
+
       {/* Encumbrance Modal */}
       {showEncumbranceModal && (
         <div className="modal-overlay" onClick={() => setShowEncumbranceModal(false)}>
@@ -583,6 +618,13 @@ export default function MemberDetail() {
                     <option value="Waitlist">Waitlist</option>
                   </select>
                 </div>
+                {member.tier === 'Waitlist' && tierForm.tier && tierForm.tier !== 'Waitlist' && (
+                  <div className="alert alert-info" style={{ marginTop: '12px' }}>
+                    <p style={{ margin: 0 }}>
+                      Changing from Waitlist will automatically move everyone below up one position.
+                    </p>
+                  </div>
+                )}
                 <div className="form-group">
                   <label className="form-label">Reason</label>
                   <textarea
@@ -590,7 +632,7 @@ export default function MemberDetail() {
                     value={tierForm.reason}
                     onChange={e => setTierForm(f => ({ ...f, reason: e.target.value }))}
                     rows={2}
-                    placeholder="e.g., Life eligibility met, Board action, etc."
+                    placeholder="e.g., Life eligibility met, Board action, Membership approved, etc."
                   />
                 </div>
               </div>
@@ -606,18 +648,6 @@ export default function MemberDetail() {
           </div>
         </div>
       )}
-      606       </div>
-    )}
-     {/* Audit History */}
-     <div style={{ marginTop: '24px' }}>
-      <AuditHistory 
-        memberId={member.id} 
-        memberName={`${member.first_name} ${member.last_name}`} 
-      />
-   </div>
-   </div>
-   );
- }
     </div>
   );
 }

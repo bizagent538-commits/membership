@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Trash2 } from 'lucide-react';
 import { formatDateForInput, calculateAge } from '../utils/calculations';
 
 export default function MemberForm() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
   
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   
   const [form, setForm] = useState({
     member_number: '',
@@ -25,7 +28,7 @@ export default function MemberForm() {
     address_state: 'CT',
     address_zip: '',
     original_join_date: '',
-    tier: 'Regular',
+    tier: searchParams.get('tier') || 'Regular',
     status: 'Active',
     assessment_years_completed: 0,
     notes: ''
@@ -117,13 +120,6 @@ export default function MemberForm() {
         
         if (error) throw error;
         
-        // Log tier change if different
-        const { data: oldMember } = await supabase
-          .from('members')
-          .select('tier')
-          .eq('id', id)
-          .single();
-        
         navigate(`/members/${id}`);
       } else {
         const { data, error } = await supabase
@@ -158,6 +154,27 @@ export default function MemberForm() {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!id) return;
+    
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('members')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      navigate('/members');
+    } catch (err) {
+      alert('Error deleting member: ' + err.message);
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -390,16 +407,82 @@ export default function MemberForm() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-          <button type="submit" className="btn btn-primary btn-lg" disabled={saving}>
-            <Save size={16} />
-            {saving ? 'Saving...' : (isEdit ? 'Update Member' : 'Create Member')}
-          </button>
-          <Link to={isEdit ? `/members/${id}` : '/members'} className="btn btn-secondary btn-lg">
-            Cancel
-          </Link>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'space-between' }}>
+          <div>
+            {isEdit && (
+              <button 
+                type="button" 
+                onClick={() => setShowDeleteConfirm(true)} 
+                className="btn btn-danger"
+              >
+                <Trash2 size={16} />
+                Delete Member
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <Link to={isEdit ? `/members/${id}` : '/members'} className="btn btn-secondary btn-lg">
+              Cancel
+            </Link>
+            <button type="submit" className="btn btn-primary btn-lg" disabled={saving}>
+              <Save size={16} />
+              {saving ? 'Saving...' : (isEdit ? 'Update Member' : 'Create Member')}
+            </button>
+          </div>
         </div>
       </form>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>⚠️ Delete Member</h2>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '16px' }}>
+                Are you sure you want to delete <strong>{form.first_name} {form.last_name}</strong>?
+              </p>
+              <p style={{ color: '#dc2626', fontWeight: '500' }}>
+                This action cannot be undone. All associated records (payments, work hours, history) will also be deleted.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button 
+                type="button" 
+                onClick={() => setShowDeleteConfirm(false)} 
+                className="btn btn-secondary"
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={handleDelete} 
+                className="btn btn-danger"
+                disabled={deleting}
+              >
+                {deleting ? 'Deleting...' : 'Yes, Delete Member'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .btn-danger {
+          background-color: #dc2626;
+          color: white;
+          border: none;
+        }
+        .btn-danger:hover {
+          background-color: #b91c1c;
+        }
+        .btn-danger:disabled {
+          background-color: #fca5a5;
+          cursor: not-allowed;
+        }
+      `}</style>
     </div>
   );
 }
