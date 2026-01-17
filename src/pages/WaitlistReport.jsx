@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../lib/supabase';
 import { ArrowUp, ArrowDown, Download, Trash2 } from 'lucide-react';
 import WaitlistImport from '../components/WaitlistImport';
 
