@@ -1,11 +1,16 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { ArrowUp, ArrowDown, Download, Upload } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
+import { ArrowUp, ArrowDown, Download, Trash2 } from 'lucide-react';
+import WaitlistImport from '../components/WaitlistImport';
 
 export default function WaitlistReport() {
   const [waitlist, setWaitlist] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    total: 0,
+    avgWaitDays: 0,
+    longestWaitDays: 0
+  });
 
   useEffect(() => {
     loadWaitlist();
@@ -15,305 +20,329 @@ export default function WaitlistReport() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('members')
+        .from('waitlist')
         .select('*')
-        .eq('tier', 'Waitlist')
         .order('waitlist_position', { ascending: true });
-      
+
       if (error) throw error;
+
       setWaitlist(data || []);
-    } catch (err) {
-      console.error('Error loading waitlist:', err);
-      alert('Error loading waitlist');
+      calculateStats(data || []);
+    } catch (error) {
+      console.error('Error loading waitlist:', error);
+      alert('Failed to load waitlist');
     } finally {
       setLoading(false);
     }
   };
 
-  const moveUp = async (member) => {
-    if (member.waitlist_position <= 1) return;
-    
+  const calculateStats = (data) => {
+    if (data.length === 0) {
+      setStats({ total: 0, avgWaitDays: 0, longestWaitDays: 0 });
+      return;
+    }
+
+    const today = new Date();
+    const waitDays = data.map(entry => {
+      if (!entry.date_application_received) return 0;
+      const appDate = new Date(entry.date_application_received);
+      const days = Math.floor((today - appDate) / (1000 * 60 * 60 * 24));
+      return days;
+    });
+
+    const avgDays = Math.round(waitDays.reduce((a, b) => a + b, 0) / waitDays.length);
+    const longestDays = Math.max(...waitDays);
+
+    setStats({
+      total: data.length,
+      avgWaitDays: avgDays,
+      longestWaitDays: longestDays
+    });
+  };
+
+  const moveUp = async (entry) => {
+    if (entry.waitlist_position <= 1) return;
+
     try {
-      const newPosition = member.waitlist_position - 1;
-      const swapMember = waitlist.find(m => m.waitlist_position === newPosition);
-      
+      // Find the entry above
+      const entryAbove = waitlist.find(e => e.waitlist_position === entry.waitlist_position - 1);
+      if (!entryAbove) return;
+
       // Swap positions
-      await supabase.from('members').update({ waitlist_position: member.waitlist_position }).eq('id', swapMember.id);
-      await supabase.from('members').update({ waitlist_position: newPosition }).eq('id', member.id);
-      
+      await supabase
+        .from('waitlist')
+        .update({ waitlist_position: entry.waitlist_position })
+        .eq('id', entryAbove.id);
+
+      await supabase
+        .from('waitlist')
+        .update({ waitlist_position: entry.waitlist_position - 1 })
+        .eq('id', entry.id);
+
       loadWaitlist();
-    } catch (err) {
-      console.error('Error moving member:', err);
-      alert('Error updating position');
+    } catch (error) {
+      console.error('Error moving up:', error);
+      alert('Failed to reorder waitlist');
     }
   };
 
-  const moveDown = async (member) => {
-    if (member.waitlist_position >= waitlist.length) return;
-    
+  const moveDown = async (entry) => {
+    if (entry.waitlist_position >= waitlist.length) return;
+
     try {
-      const newPosition = member.waitlist_position + 1;
-      const swapMember = waitlist.find(m => m.waitlist_position === newPosition);
-      
+      // Find the entry below
+      const entryBelow = waitlist.find(e => e.waitlist_position === entry.waitlist_position + 1);
+      if (!entryBelow) return;
+
       // Swap positions
-      await supabase.from('members').update({ waitlist_position: member.waitlist_position }).eq('id', swapMember.id);
-      await supabase.from('members').update({ waitlist_position: newPosition }).eq('id', member.id);
-      
+      await supabase
+        .from('waitlist')
+        .update({ waitlist_position: entry.waitlist_position })
+        .eq('id', entryBelow.id);
+
+      await supabase
+        .from('waitlist')
+        .update({ waitlist_position: entry.waitlist_position + 1 })
+        .eq('id', entry.id);
+
       loadWaitlist();
-    } catch (err) {
-      console.error('Error moving member:', err);
-      alert('Error updating position');
+    } catch (error) {
+      console.error('Error moving down:', error);
+      alert('Failed to reorder waitlist');
     }
   };
 
-  const getDaysWaiting = (dateAdded) => {
-    if (!dateAdded) return 0;
-    const added = new Date(dateAdded);
-    const now = new Date();
-    const diff = now - added;
-    return Math.floor(diff / (1000 * 60 * 60 * 24));
+  const removeFromWaitlist = async (entry) => {
+    if (!confirm(`Remove ${entry.contact_name} from the waitlist?`)) return;
+
+    try {
+      // Delete the entry
+      const { error } = await supabase
+        .from('waitlist')
+        .delete()
+        .eq('id', entry.id);
+
+      if (error) throw error;
+
+      // Reorder remaining entries
+      const remaining = waitlist
+        .filter(e => e.id !== entry.id)
+        .sort((a, b) => a.waitlist_position - b.waitlist_position);
+
+      for (let i = 0; i < remaining.length; i++) {
+        await supabase
+          .from('waitlist')
+          .update({ waitlist_position: i + 1 })
+          .eq('id', remaining[i].id);
+      }
+
+      loadWaitlist();
+    } catch (error) {
+      console.error('Error removing from waitlist:', error);
+      alert('Failed to remove from waitlist');
+    }
   };
 
   const exportToExcel = () => {
-    const data = waitlist.map(m => ({
-      'Position': m.waitlist_position,
-      'Member #': m.member_number,
-      'Last Name': m.last_name,
-      'First Name': m.first_name,
-      'Email': m.email || '',
-      'Phone': m.phone || '',
-      'Date Added': m.waitlist_date ? new Date(m.waitlist_date).toLocaleDateString() : '',
-      'Days Waiting': getDaysWaiting(m.waitlist_date)
-    }));
+    const headers = [
+      'Position',
+      'Last Name',
+      'Contact Name',
+      'Email',
+      'Phone',
+      'Street Address',
+      'City',
+      'State/Province',
+      'Postal Code',
+      'Sponsor #1',
+      'Sponsor #2',
+      'Date Application Received',
+      'Days Waiting',
+      'Status'
+    ];
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Waitlist');
-    
-    // Auto-size columns
-    const colWidths = Object.keys(data[0] || {}).map(key => ({ wch: Math.max(key.length, 15) }));
-    ws['!cols'] = colWidths;
-    
-    XLSX.writeFile(wb, `waitlist-${new Date().toISOString().split('T')[0]}.xlsx`);
+    const today = new Date();
+    const rows = waitlist.map(entry => {
+      const daysWaiting = entry.date_application_received
+        ? Math.floor((today - new Date(entry.date_application_received)) / (1000 * 60 * 60 * 24))
+        : 0;
+
+      return [
+        entry.waitlist_position,
+        entry.last_name || '',
+        entry.contact_name || '',
+        entry.email || '',
+        entry.phone || '',
+        entry.street_address || '',
+        entry.city || '',
+        entry.state_province || '',
+        entry.postal_code || '',
+        entry.sponsor_1 || '',
+        entry.sponsor_2 || '',
+        entry.date_application_received || '',
+        daysWaiting,
+        entry.status || 'pending'
+      ];
+    });
+
+    const csv = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `waitlist_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
   };
 
-  const handleImport = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet);
-
-      // Get current max position
-      const maxPosition = waitlist.length > 0 ? Math.max(...waitlist.map(m => m.waitlist_position)) : 0;
-
-      // Import each row
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        
-        const memberData = {
-          member_number: row['Member #'] || `W${Date.now()}-${i}`,
-          first_name: row['First Name'] || '',
-          last_name: row['Last Name'] || '',
-          email: row['Email'] || null,
-          phone: row['Phone'] || null,
-          address_street: row['Street Address'] || null,
-          address_city: row['City'] || null,
-          address_state: row['State'] || null,
-          address_zip: row['Zip'] || null,
-          tier: 'Waitlist',
-          status: 'Active',
-          waitlist_position: maxPosition + i + 1,
-          waitlist_date: row['Application Received'] ? new Date(row['Application Received']).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          date_of_birth: row['Date of Birth'] || null,
-          original_join_date: null, // NULL until they actually join
-          assessment_years_completed: 0,
-          notes: [
-            row['Sponsor 1'] ? `Sponsor 1: ${row['Sponsor 1']}` : '',
-            row['Sponsor 2'] ? `Sponsor 2: ${row['Sponsor 2']}` : ''
-          ].filter(Boolean).join('; ') || null
-        };
-
-        await supabase.from('members').insert(memberData);
-      }
-
-      alert(`Imported ${rows.length} waitlist members`);
-      loadWaitlist();
-    } catch (err) {
-      console.error('Import error:', err);
-      alert('Error importing file: ' + err.message);
-    }
-
-    e.target.value = ''; // Reset file input
+  const getDaysWaiting = (dateReceived) => {
+    if (!dateReceived) return 0;
+    const today = new Date();
+    const appDate = new Date(dateReceived);
+    return Math.floor((today - appDate) / (1000 * 60 * 60 * 24));
   };
-
-  const avgDaysWaiting = waitlist.length > 0
-    ? Math.round(waitlist.reduce((sum, m) => sum + getDaysWaiting(m.waitlist_date), 0) / waitlist.length)
-    : 0;
-
-  const longestWait = waitlist.length > 0
-    ? Math.max(...waitlist.map(m => getDaysWaiting(m.waitlist_date)))
-    : 0;
-
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-        <div>Loading waitlist...</div>
-      </div>
-    );
-  }
 
   return (
-    <div>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '8px' }}>Membership Waitlist</h1>
-        <p style={{ color: '#6b7280' }}>Manage and track membership waitlist</p>
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Membership Waitlist</h1>
+        <button
+          onClick={exportToExcel}
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+        >
+          <Download className="w-4 h-4" />
+          Export to Excel
+        </button>
       </div>
 
       {/* Stats Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-        <div className="card" style={{ padding: '16px' }}>
-          <div style={{ fontSize: '14px', color: '#6b7280', marginBottom: '4px' }}>Total on Waitlist</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#2563eb' }}>{waitlist.length}</div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="text-sm text-gray-600">Total on Waitlist</div>
+          <div className="text-2xl font-bold">{stats.total}</div>
         </div>
-        <div className="card" style={{ padding: '16px' }}>
-          <div style={{ fontSize: '14px', color: '#6b7280', marginBottom: '4px' }}>Average Wait Time</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#7c3aed' }}>{avgDaysWaiting} days</div>
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="text-sm text-gray-600">Average Wait Time</div>
+          <div className="text-2xl font-bold">{stats.avgWaitDays} days</div>
         </div>
-        <div className="card" style={{ padding: '16px' }}>
-          <div style={{ fontSize: '14px', color: '#6b7280', marginBottom: '4px' }}>Longest Wait</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#dc2626' }}>{longestWait} days</div>
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="text-sm text-gray-600">Longest Wait Time</div>
+          <div className="text-2xl font-bold">{stats.longestWaitDays} days</div>
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="card" style={{ marginBottom: '24px' }}>
-        <div className="card-header">
-          <h2>Actions</h2>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={exportToExcel} className="btn btn-secondary">
-              <Download size={16} /> Export to Excel
-            </button>
-            <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
-              <Upload size={16} /> Import from Excel
-              <input type="file" accept=".xlsx,.xls" onChange={handleImport} style={{ display: 'none' }} />
-            </label>
-          </div>
-        </div>
+      {/* Import Component */}
+      <div className="mb-6">
+        <WaitlistImport onImportComplete={loadWaitlist} />
       </div>
 
       {/* Waitlist Table */}
-      <div className="card">
-        <div className="card-header">
-          <h2>Current Waitlist</h2>
-        </div>
-        <div className="table-container">
-          <table className="table">
-            <thead>
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <th>Position</th>
-                <th>Member #</th>
-                <th>Name</th>
-                <th>Contact</th>
-                <th>Date Added</th>
-                <th>Days Waiting</th>
-                <th>Reorder</th>
-                <th>Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Position</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sponsors</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date Applied</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Days Waiting</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {waitlist.length === 0 ? (
+            <tbody className="bg-white divide-y divide-gray-200">
+              {loading ? (
                 <tr>
-                  <td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
-                    No members on waitlist
+                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                    Loading waitlist...
+                  </td>
+                </tr>
+              ) : waitlist.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                    No entries on waitlist
                   </td>
                 </tr>
               ) : (
-                waitlist.map(member => (
-                  <tr key={member.id}>
-                    <td><strong>#{member.waitlist_position}</strong></td>
-                    <td>{member.member_number}</td>
-                    <td>{member.last_name}, {member.first_name}</td>
-                    <td>
-                      {member.email && <div style={{ fontSize: '13px' }}>{member.email}</div>}
-                      {member.phone && <div style={{ fontSize: '13px', color: '#6b7280' }}>{member.phone}</div>}
+                waitlist.map((entry) => (
+                  <tr key={entry.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium">{entry.waitlist_position}</td>
+                    <td className="px-4 py-3 text-sm">
+                      <div className="font-medium">{entry.contact_name}</div>
+                      <div className="text-gray-500 text-xs">{entry.last_name}</div>
                     </td>
-                    <td>{member.waitlist_date ? new Date(member.waitlist_date).toLocaleDateString() : '-'}</td>
-                    <td>
-                      <span className={getDaysWaiting(member.waitlist_date) > 180 ? 'badge badge-danger' : getDaysWaiting(member.waitlist_date) > 90 ? 'badge badge-warning' : 'badge'}>
-                        {getDaysWaiting(member.waitlist_date)} days
-                      </span>
+                    <td className="px-4 py-3 text-sm">
+                      <div>{entry.email}</div>
+                      <div className="text-gray-500 text-xs">{entry.phone}</div>
                     </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button
-                          onClick={() => moveUp(member)}
-                          disabled={member.waitlist_position <= 1}
-                          className="btn btn-sm"
-                          title="Move up"
-                          style={{ padding: '4px 8px' }}
-                        >
-                          <ArrowUp size={14} />
-                        </button>
-                        <button
-                          onClick={() => moveDown(member)}
-                          disabled={member.waitlist_position >= waitlist.length}
-                          className="btn btn-sm"
-                          title="Move down"
-                          style={{ padding: '4px 8px' }}
-                        >
-                          <ArrowDown size={14} />
-                        </button>
+                    <td className="px-4 py-3 text-sm">
+                      <div>{entry.city}, {entry.state_province}</div>
+                      <div className="text-gray-500 text-xs">{entry.postal_code}</div>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <div className="text-xs">
+                        {entry.sponsor_1 && <div>1: {entry.sponsor_1}</div>}
+                        {entry.sponsor_2 && <div>2: {entry.sponsor_2}</div>}
                       </div>
                     </td>
-                    <td>
-                      <a href={`/members/${member.id}`} className="btn btn-sm">
-                        View
-                      </a>
+                    <td className="px-4 py-3 text-sm">
+                      {entry.date_application_received
+                        ? new Date(entry.date_application_received).toLocaleDateString()
+                        : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium">
+                      {getDaysWaiting(entry.date_application_received)}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        entry.status === 'approved' ? 'bg-green-100 text-green-800' :
+                        entry.status === 'contacted' ? 'bg-blue-100 text-blue-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {entry.status || 'pending'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => moveUp(entry)}
+                          disabled={entry.waitlist_position === 1}
+                          className="p-1 text-gray-600 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Move up"
+                        >
+                          <ArrowUp className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => moveDown(entry)}
+                          disabled={entry.waitlist_position === waitlist.length}
+                          className="p-1 text-gray-600 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Move down"
+                        >
+                          <ArrowDown className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => removeFromWaitlist(entry)}
+                          className="p-1 text-gray-600 hover:text-red-600"
+                          title="Remove from waitlist"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* Import Template Info */}
-      <div className="card" style={{ marginTop: '24px' }}>
-        <div className="card-header">
-          <h2>Import Template</h2>
-        </div>
-        <div className="card-body">
-          <p>Excel file should have these columns (in this exact order):</p>
-          <table className="table" style={{ maxWidth: '800px' }}>
-            <thead>
-              <tr>
-                <th>Column</th>
-                <th>Required</th>
-                <th>Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td>First Name</td><td>Yes</td><td>Person's first name</td></tr>
-              <tr><td>Last Name</td><td>Yes</td><td>Person's last name</td></tr>
-              <tr><td>Email</td><td>No</td><td>Email address</td></tr>
-              <tr><td>Street Address</td><td>No</td><td>Street address</td></tr>
-              <tr><td>City</td><td>No</td><td>City</td></tr>
-              <tr><td>State</td><td>No</td><td>State (2-letter code)</td></tr>
-              <tr><td>Zip</td><td>No</td><td>ZIP code</td></tr>
-              <tr><td>Sponsor 1</td><td>No</td><td>Name of first sponsor (saved in notes)</td></tr>
-              <tr><td>Sponsor 2</td><td>No</td><td>Name of second sponsor (saved in notes)</td></tr>
-              <tr><td>Application Received</td><td>No</td><td>Date application received (defaults to today)</td></tr>
-            </tbody>
-          </table>
-          <p style={{ marginTop: '12px', color: '#6b7280' }}>
-            New imports are added to the bottom of the waitlist in the order they appear in the file.
-            Sponsor information will be saved in the member's notes field.
-          </p>
         </div>
       </div>
     </div>
