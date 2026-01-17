@@ -12,6 +12,7 @@ import LifeEligibility from './pages/LifeEligibility';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Import from './pages/Import';
+import WaitlistReport from './pages/WaitlistReport';
 import './index.css';
 
 function ProtectedRoute({ children }) {
@@ -54,6 +55,7 @@ function AppRoutes() {
         <Route path="reports" element={<Reports />} />
         <Route path="settings" element={<Settings />} />
         <Route path="import" element={<Import />} />
+        <Route path="/waitlist" element={<WaitlistReport />} />
       </Route>
     </Routes>
   );
