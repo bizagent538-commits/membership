@@ -54,7 +54,7 @@ export default function Settings() {
     setDeleting(true);
     try {
       // Delete in order to respect foreign keys (child tables first)
-      // Using .gte('created_at', '1970-01-01') to match all rows
+      // Using .not('id', 'is', null) to match all rows - Supabase recommended approach
       const tables = [
         'payments',
         'work_hours', 
@@ -68,15 +68,18 @@ export default function Settings() {
       ];
       
       for (const table of tables) {
-        const { error } = await supabase
+        console.log(`Deleting from ${table}...`);
+        const { data, error } = await supabase
           .from(table)
           .delete()
-          .gte('created_at', '1970-01-01');
+          .not('id', 'is', null)
+          .select();
         
         if (error) {
           console.error(`Error deleting from ${table}:`, error);
           throw new Error(`Failed to delete from ${table}: ${error.message}`);
         }
+        console.log(`Deleted ${data?.length || 0} rows from ${table}`);
       }
       
       setShowDeleteConfirm(false);
@@ -84,6 +87,7 @@ export default function Settings() {
       alert('All data deleted successfully');
       await refetchMembers();
     } catch (err) {
+      console.error('Delete all error:', err);
       alert('Error deleting data: ' + err.message);
     } finally {
       setDeleting(false);
