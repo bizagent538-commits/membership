@@ -15,6 +15,7 @@ export default function MemberForm() {
   const [error, setError] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [waitlistMember, setWaitlistMember] = useState(null);
   
   const [form, setForm] = useState({
     member_number: '',
@@ -78,6 +79,56 @@ export default function MemberForm() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
+    
+    // If tier changed to "Promote", load first waitlist member
+    if (name === 'tier' && value === 'Promote') {
+      loadFirstWaitlistMember();
+    }
+  };
+  
+  const loadFirstWaitlistMember = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('members')
+        .select('*')
+        .eq('tier', 'Waitlist')
+        .order('waitlist_position', { ascending: true })
+        .limit(1)
+        .single();
+      
+      if (error) {
+        if (error.code === 'PGRST116') {
+          alert('No members on waitlist');
+          setForm(prev => ({ ...prev, tier: 'Regular' }));
+          return;
+        }
+        throw error;
+      }
+      
+      setWaitlistMember(data);
+      
+      // Populate form with waitlist member's data
+      setForm(prev => ({
+        ...prev,
+        member_number: data.member_number || '',
+        first_name: data.first_name || '',
+        last_name: data.last_name || '',
+        date_of_birth: formatDateForInput(data.date_of_birth) || '',
+        email: data.email || '',
+        phone: data.phone || '',
+        address_street: data.address_street || '',
+        address_city: data.address_city || '',
+        address_state: data.address_state || 'CT',
+        address_zip: data.address_zip || '',
+        original_join_date: '', // Leave empty - they need to be sworn in
+        notes: data.notes || ''
+      }));
+      
+      alert(`Loaded: ${data.first_name} ${data.last_name} (Position #${data.waitlist_position})`);
+    } catch (err) {
+      setError(err.message);
+      setForm(prev => ({ ...prev, tier: 'Regular' }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -105,11 +156,13 @@ export default function MemberForm() {
         address_city: form.address_city || null,
         address_state: form.address_state || null,
         address_zip: form.address_zip || null,
-        original_join_date: form.original_join_date,
-        tier: form.tier,
+        original_join_date: form.original_join_date || null,
+        tier: form.tier === 'Promote' ? 'Regular' : form.tier, // Convert Promote to Regular
         status: form.status,
         assessment_years_completed: parseInt(form.assessment_years_completed) || 0,
-        notes: form.notes || null
+        notes: form.notes || null,
+        waitlist_position: null, // Clear waitlist position
+        waitlist_date: null // Clear waitlist date
       };
 
       if (isEdit) {
@@ -122,22 +175,44 @@ export default function MemberForm() {
         
         navigate(`/members/${id}`);
       } else {
-        const { data, error } = await supabase
-          .from('members')
-          .insert([memberData])
-          .select()
-          .single();
-        
-        if (error) throw error;
-        
-        // Log initial tier
-        await supabase.from('tier_history').insert([{
-          member_id: data.id,
-          old_tier: null,
-          new_tier: form.tier,
-          effective_date: form.original_join_date,
-          reason: 'Initial membership'
-        }]);
+        // Check if promoting from waitlist
+        if (form.tier === 'Promote' && waitlistMember) {
+          // Update existing waitlist member instead of creating new
+          const { error } = await supabase
+            .from('members')
+            .update(memberData)
+            .eq('id', waitlistMember.id);
+          
+          if (error) throw error;
+          
+          // Log tier change from Waitlist to Regular
+          await supabase.from('tier_history').insert([{
+            member_id: waitlistMember.id,
+            old_tier: 'Waitlist',
+            new_tier: 'Regular',
+            effective_date: new Date().toISOString().split('T')[0],
+            reason: 'Promoted from waitlist'
+          }]);
+          
+          navigate(`/members/${waitlistMember.id}`);
+        } else {
+          // Normal add new member
+          const { data, error } = await supabase
+            .from('members')
+            .insert([memberData])
+            .select()
+            .single();
+          
+          if (error) throw error;
+          
+          // Log initial tier
+          await supabase.from('tier_history').insert([{
+            member_id: data.id,
+            old_tier: null,
+            new_tier: form.tier,
+            effective_date: form.original_join_date,
+            reason: 'Initial membership'
+          }]);
         
         // Log initial status
         await supabase.from('status_history').insert([{
@@ -234,7 +309,7 @@ export default function MemberForm() {
                   <option value="Absentee">Absentee</option>
                   <option value="Life">Life</option>
                   <option value="Honorary">Honorary</option>
-                  <option value="Waitlist">Waitlist</option>
+                  {!isEdit && <option value="Promote">Promote from Waitlist</option>}
                 </select>
               </div>
               <div className="form-group">
