@@ -53,33 +53,12 @@ export default function Settings() {
     
     setDeleting(true);
     try {
-      // Delete in order to respect foreign keys (child tables first)
-      // Using .not('id', 'is', null) to match all rows - Supabase recommended approach
-      const tables = [
-        'payments',
-        'work_hours', 
-        'life_eligibility_log',
-        'membership_years',
-        'expulsion_records',
-        'status_history',
-        'tier_history',
-        'encumbrances',
-        'members'
-      ];
+      // Call the database function which runs with SECURITY DEFINER (elevated privileges)
+      const { error } = await supabase.rpc('delete_all_members');
       
-      for (const table of tables) {
-        console.log(`Deleting from ${table}...`);
-        const { data, error } = await supabase
-          .from(table)
-          .delete()
-          .not('id', 'is', null)
-          .select();
-        
-        if (error) {
-          console.error(`Error deleting from ${table}:`, error);
-          throw new Error(`Failed to delete from ${table}: ${error.message}`);
-        }
-        console.log(`Deleted ${data?.length || 0} rows from ${table}`);
+      if (error) {
+        console.error('Delete all error:', error);
+        throw new Error(error.message);
       }
       
       setShowDeleteConfirm(false);
