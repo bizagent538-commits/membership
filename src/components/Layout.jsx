@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { Users, LayoutDashboard, DollarSign, Clock, Award, FileText, Settings, LogOut, Upload } from 'lucide-react';
+import { Users, LayoutDashboard, DollarSign, Clock, Award, FileText, Settings, LogOut, Upload, ListOrdered } from 'lucide-react';
 
 export default function Layout() {
   const { user, signOut } = useAuth();
@@ -34,6 +34,9 @@ export default function Layout() {
           </NavLink>
           <NavLink to="/life-eligibility" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Award size={16} /> Life Eligibility
+          </NavLink>
+          <NavLink to="/waitlist" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <ListOrdered size={16} /> Waitlist
           </NavLink>
           <NavLink to="/reports" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <FileText size={16} /> Reports
