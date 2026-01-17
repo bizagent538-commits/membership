@@ -120,13 +120,21 @@ export default function WaitlistReport() {
           last_name: row['Last Name'] || '',
           email: row['Email'] || null,
           phone: row['Phone'] || null,
+          address_street: row['Street Address'] || null,
+          address_city: row['City'] || null,
+          address_state: row['State'] || null,
+          address_zip: row['Zip'] || null,
           tier: 'Waitlist',
           status: 'Active',
           waitlist_position: maxPosition + i + 1,
-          waitlist_date: row['Date Added'] ? new Date(row['Date Added']).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          waitlist_date: row['Application Received'] ? new Date(row['Application Received']).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           date_of_birth: row['Date of Birth'] || null,
-          original_join_date: new Date().toISOString().split('T')[0],
-          assessment_years_completed: 0
+          original_join_date: null, // NULL until they actually join
+          assessment_years_completed: 0,
+          notes: [
+            row['Sponsor 1'] ? `Sponsor 1: ${row['Sponsor 1']}` : '',
+            row['Sponsor 2'] ? `Sponsor 2: ${row['Sponsor 2']}` : ''
+          ].filter(Boolean).join('; ') || null
         };
 
         await supabase.from('members').insert(memberData);
@@ -280,8 +288,8 @@ export default function WaitlistReport() {
           <h2>Import Template</h2>
         </div>
         <div className="card-body">
-          <p>Excel file should have these columns:</p>
-          <table className="table" style={{ maxWidth: '600px' }}>
+          <p>Excel file should have these columns (in this exact order):</p>
+          <table className="table" style={{ maxWidth: '800px' }}>
             <thead>
               <tr>
                 <th>Column</th>
@@ -293,13 +301,18 @@ export default function WaitlistReport() {
               <tr><td>First Name</td><td>Yes</td><td>Person's first name</td></tr>
               <tr><td>Last Name</td><td>Yes</td><td>Person's last name</td></tr>
               <tr><td>Email</td><td>No</td><td>Email address</td></tr>
-              <tr><td>Phone</td><td>No</td><td>Phone number</td></tr>
-              <tr><td>Date Added</td><td>No</td><td>When added to waitlist (defaults to today)</td></tr>
-              <tr><td>Member #</td><td>No</td><td>Member number (auto-generated if blank)</td></tr>
+              <tr><td>Street Address</td><td>No</td><td>Street address</td></tr>
+              <tr><td>City</td><td>No</td><td>City</td></tr>
+              <tr><td>State</td><td>No</td><td>State (2-letter code)</td></tr>
+              <tr><td>Zip</td><td>No</td><td>ZIP code</td></tr>
+              <tr><td>Sponsor 1</td><td>No</td><td>Name of first sponsor (saved in notes)</td></tr>
+              <tr><td>Sponsor 2</td><td>No</td><td>Name of second sponsor (saved in notes)</td></tr>
+              <tr><td>Application Received</td><td>No</td><td>Date application received (defaults to today)</td></tr>
             </tbody>
           </table>
           <p style={{ marginTop: '12px', color: '#6b7280' }}>
             New imports are added to the bottom of the waitlist in the order they appear in the file.
+            Sponsor information will be saved in the member's notes field.
           </p>
         </div>
       </div>
