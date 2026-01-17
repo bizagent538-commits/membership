@@ -53,16 +53,31 @@ export default function Settings() {
     
     setDeleting(true);
     try {
-      // Delete in order to respect foreign keys
-      await supabase.from('payments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('work_hours').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('life_eligibility_log').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('membership_years').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('expulsion_records').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('status_history').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('tier_history').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('encumbrances').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('members').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      // Delete in order to respect foreign keys (child tables first)
+      // Using .gte('created_at', '1970-01-01') to match all rows
+      const tables = [
+        'payments',
+        'work_hours', 
+        'life_eligibility_log',
+        'membership_years',
+        'expulsion_records',
+        'status_history',
+        'tier_history',
+        'encumbrances',
+        'members'
+      ];
+      
+      for (const table of tables) {
+        const { error } = await supabase
+          .from(table)
+          .delete()
+          .gte('created_at', '1970-01-01');
+        
+        if (error) {
+          console.error(`Error deleting from ${table}:`, error);
+          throw new Error(`Failed to delete from ${table}: ${error.message}`);
+        }
+      }
       
       setShowDeleteConfirm(false);
       setDeletePhrase('');
