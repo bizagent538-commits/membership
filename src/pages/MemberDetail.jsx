@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useMember, useSettings } from '../hooks/useData';
 import { supabase } from '../lib/supabase';
 import { ArrowLeft, Edit, AlertTriangle, Plus, Check, X } from 'lucide-react';
+import AuditHistory from '../components/AuditHistory';
 import { 
   formatDate, 
   formatCurrency, 
@@ -604,6 +605,20 @@ export default function MemberDetail() {
           </div>
         </div>
       )}
+      606       </div>
+607     )}
+608
+609     {/* Audit History */}
+610     <div style={{ marginTop: '24px' }}>
+611       <AuditHistory 
+612         memberId={member.id} 
+613         memberName={`${member.first_name} ${member.last_name}`} 
+614       />
+615     </div>
+616
+617   </div>
+618   );
+619 }
     </div>
   );
 }
