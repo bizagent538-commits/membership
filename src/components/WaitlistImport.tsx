@@ -135,8 +135,8 @@ export default function WaitlistImport({ onImportComplete }: WaitlistImportProps
           if (onImportComplete) {
             onImportComplete();
           }
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Failed to import waitlist');
+        } catch (err: any) {
+          setError(err?.message || 'Failed to import waitlist');
           setImporting(false);
         }
       },
