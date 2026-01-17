@@ -214,16 +214,17 @@ export default function MemberForm() {
             reason: 'Initial membership'
           }]);
         
-        // Log initial status
-        await supabase.from('status_history').insert([{
-          member_id: data.id,
-          old_status: null,
-          new_status: 'Active',
-          change_date: form.original_join_date,
-          reason: 'New member'
-        }]);
+          // Log initial status
+          await supabase.from('status_history').insert([{
+            member_id: data.id,
+            old_status: null,
+            new_status: 'Active',
+            change_date: form.original_join_date,
+            reason: 'New member'
+          }]);
         
-        navigate(`/members/${data.id}`);
+          navigate(`/members/${data.id}`);
+        }
       }
     } catch (err) {
       setError(err.message);
