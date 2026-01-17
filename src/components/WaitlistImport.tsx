@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Papa from 'papaparse';
 import { Upload, AlertCircle, CheckCircle } from 'lucide-react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../lib/supabase';
 
 interface WaitlistEntry {
   lastName: string;
