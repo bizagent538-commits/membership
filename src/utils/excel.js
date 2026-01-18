@@ -123,8 +123,8 @@ export function parseImportedExcel(file) {
           }
           
           // Normalize tier and status
-          let normalizedTier = tier;
-          let normalizedStatus = status;
+          let normalizedTier = 'Regular';
+          let normalizedStatus = status || 'Active';
           const tierLower = (tier || '').toLowerCase();
           const statusLower = (status || '').toLowerCase();
           
@@ -140,12 +140,15 @@ export function parseImportedExcel(file) {
           else normalizedTier = 'Regular'; // Default to Regular for unknown tiers
           
           // Normalize status (only if not already set by tier processing)
-          if (normalizedStatus === status) {
+          if (statusLower && statusLower !== normalizedStatus.toLowerCase()) {
             if (statusLower.includes('active')) normalizedStatus = 'Active';
             else if (statusLower.includes('deceased')) normalizedStatus = 'Deceased';
             else if (statusLower.includes('resigned')) normalizedStatus = 'Resigned';
             else if (statusLower.includes('expelled')) normalizedStatus = 'Expelled';
-            else normalizedStatus = 'Active'; // Default to Active
+          }
+          // Ensure status defaults to Active if still empty
+          if (!normalizedStatus || normalizedStatus === 'null' || normalizedStatus === 'undefined') {
+            normalizedStatus = 'Active';
           }
           
           return {
