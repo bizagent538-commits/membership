@@ -214,10 +214,15 @@ export default function WaitlistReport() {
           row[h] = values[idx] || '';
         });
 
+        const firstName = row['first_name'] || row['first name'] || row['firstname'] || '';
+        const lastName = row['last_name'] || row['last name'] || row['lastname'] || '';
+        const fullName = row['contact_name'] || row['contact name'] || row['name'] || 
+                         (firstName && lastName ? `${firstName} ${lastName}` : firstName || lastName);
+        
         entries.push({
           waitlist_position: parseInt(row['position'] || row['waitlist_position']) || (waitlist.length + entries.length + 1),
-          last_name: row['last_name'] || row['last name'] || '',
-          contact_name: row['contact_name'] || row['contact name'] || row['name'] || row['first_name'] || '',
+          last_name: lastName,
+          contact_name: fullName,
           email: row['email'] || '',
           phone: row['phone'] || '',
           street_address: row['street_address'] || row['address'] || '',
