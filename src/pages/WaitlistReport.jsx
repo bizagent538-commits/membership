@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { ArrowUp, ArrowDown, Download, Trash2 } from 'lucide-react';
-import WaitlistImport from '../components/WaitlistImport';
+import { ArrowUp, ArrowDown, Download, Trash2, Upload, Clock, Users } from 'lucide-react';
 
 export default function WaitlistReport() {
   const [waitlist, setWaitlist] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     avgWaitDays: 0,
@@ -30,7 +30,6 @@ export default function WaitlistReport() {
       calculateStats(data || []);
     } catch (error) {
       console.error('Error loading waitlist:', error);
-      alert('Failed to load waitlist');
     } finally {
       setLoading(false);
     }
@@ -64,11 +63,9 @@ export default function WaitlistReport() {
     if (entry.waitlist_position <= 1) return;
 
     try {
-      // Find the entry above
       const entryAbove = waitlist.find(e => e.waitlist_position === entry.waitlist_position - 1);
       if (!entryAbove) return;
 
-      // Swap positions
       await supabase
         .from('waitlist')
         .update({ waitlist_position: entry.waitlist_position })
@@ -90,11 +87,9 @@ export default function WaitlistReport() {
     if (entry.waitlist_position >= waitlist.length) return;
 
     try {
-      // Find the entry below
       const entryBelow = waitlist.find(e => e.waitlist_position === entry.waitlist_position + 1);
       if (!entryBelow) return;
 
-      // Swap positions
       await supabase
         .from('waitlist')
         .update({ waitlist_position: entry.waitlist_position })
@@ -116,7 +111,6 @@ export default function WaitlistReport() {
     if (!confirm(`Remove ${entry.contact_name} from the waitlist?`)) return;
 
     try {
-      // Delete the entry
       const { error } = await supabase
         .from('waitlist')
         .delete()
@@ -124,7 +118,6 @@ export default function WaitlistReport() {
 
       if (error) throw error;
 
-      // Reorder remaining entries
       const remaining = waitlist
         .filter(e => e.id !== entry.id)
         .sort((a, b) => a.waitlist_position - b.waitlist_position);
@@ -201,6 +194,58 @@ export default function WaitlistReport() {
     window.URL.revokeObjectURL(url);
   };
 
+  const handleImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+      
+      const entries = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].match(/(".*?"|[^,]+)/g)?.map(v => v.replace(/^"|"$/g, '').trim()) || [];
+        if (values.length === 0) continue;
+
+        const row = {};
+        headers.forEach((h, idx) => {
+          row[h] = values[idx] || '';
+        });
+
+        entries.push({
+          waitlist_position: parseInt(row['position'] || row['waitlist_position']) || (waitlist.length + entries.length + 1),
+          last_name: row['last_name'] || row['last name'] || '',
+          contact_name: row['contact_name'] || row['contact name'] || row['name'] || row['first_name'] || '',
+          email: row['email'] || '',
+          phone: row['phone'] || '',
+          street_address: row['street_address'] || row['address'] || '',
+          city: row['city'] || '',
+          state_province: row['state_province'] || row['state'] || '',
+          postal_code: row['postal_code'] || row['zip'] || '',
+          sponsor_1: row['sponsor_1'] || row['sponsor 1'] || '',
+          sponsor_2: row['sponsor_2'] || row['sponsor 2'] || '',
+          date_application_received: row['date_application_received'] || row['date applied'] || null,
+          status: row['status'] || 'pending'
+        });
+      }
+
+      if (entries.length > 0) {
+        const { error } = await supabase.from('waitlist').insert(entries);
+        if (error) throw error;
+        alert(`Imported ${entries.length} waitlist entries`);
+        loadWaitlist();
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      alert('Failed to import: ' + error.message);
+    } finally {
+      setImporting(false);
+      e.target.value = '';
+    }
+  };
+
   const getDaysWaiting = (dateReceived) => {
     if (!dateReceived) return 0;
     const today = new Date();
@@ -208,133 +253,171 @@ export default function WaitlistReport() {
     return Math.floor((today - appDate) / (1000 * 60 * 60 * 24));
   };
 
+  const getStatusBadge = (status) => {
+    const styles = {
+      approved: { background: 'var(--success-light)', color: 'var(--success)' },
+      contacted: { background: 'var(--primary-light)', color: 'var(--primary)' },
+      pending: { background: 'var(--gray-100)', color: 'var(--gray-600)' }
+    };
+    const style = styles[status] || styles.pending;
+    return (
+      <span style={{ ...style, padding: '4px 8px', borderRadius: '4px', fontSize: '12px' }}>
+        {status || 'pending'}
+      </span>
+    );
+  };
+
+  if (loading) {
+    return <div className="loading"><div className="spinner"></div></div>;
+  }
+
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Membership Waitlist</h1>
-        <button
-          onClick={exportToExcel}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-        >
-          <Download className="w-4 h-4" />
-          Export to Excel
-        </button>
+    <div>
+      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: '700' }}>Membership Waitlist</h1>
+          <p style={{ color: '#6b7280' }}>Manage prospective members waiting for membership</p>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
+            <Upload size={16} />
+            {importing ? 'Importing...' : 'Import CSV'}
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleImport}
+              style={{ display: 'none' }}
+              disabled={importing}
+            />
+          </label>
+          <button onClick={exportToExcel} className="btn btn-success">
+            <Download size={16} /> Export
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-600">Total on Waitlist</div>
-          <div className="text-2xl font-bold">{stats.total}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+        <div className="card">
+          <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Users size={24} style={{ color: 'var(--primary)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--gray-500)', textTransform: 'uppercase' }}>Total on Waitlist</div>
+              <div style={{ fontSize: '24px', fontWeight: '700' }}>{stats.total}</div>
+            </div>
+          </div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-600">Average Wait Time</div>
-          <div className="text-2xl font-bold">{stats.avgWaitDays} days</div>
+        <div className="card">
+          <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: 'var(--warning-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Clock size={24} style={{ color: 'var(--warning)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--gray-500)', textTransform: 'uppercase' }}>Average Wait</div>
+              <div style={{ fontSize: '24px', fontWeight: '700' }}>{stats.avgWaitDays} days</div>
+            </div>
+          </div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-600">Longest Wait Time</div>
-          <div className="text-2xl font-bold">{stats.longestWaitDays} days</div>
+        <div className="card">
+          <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: 'var(--danger-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Clock size={24} style={{ color: 'var(--danger)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--gray-500)', textTransform: 'uppercase' }}>Longest Wait</div>
+              <div style={{ fontSize: '24px', fontWeight: '700' }}>{stats.longestWaitDays} days</div>
+            </div>
+          </div>
         </div>
-      </div>
-
-      {/* Import Component */}
-      <div className="mb-6">
-        <WaitlistImport onImportComplete={loadWaitlist} />
       </div>
 
       {/* Waitlist Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+      <div className="card">
+        <div className="card-header">
+          <h2>Waitlist Entries</h2>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="table">
+            <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Position</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sponsors</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date Applied</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Days Waiting</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th style={{ width: '60px' }}>#</th>
+                <th>Name</th>
+                <th>Contact</th>
+                <th>Location</th>
+                <th>Sponsors</th>
+                <th>Applied</th>
+                <th>Waiting</th>
+                <th>Status</th>
+                <th style={{ width: '100px' }}>Actions</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {loading ? (
+            <tbody>
+              {waitlist.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
-                    Loading waitlist...
-                  </td>
-                </tr>
-              ) : waitlist.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
-                    No entries on waitlist
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: 'var(--gray-500)' }}>
+                    No entries on waitlist. Import a CSV to add entries.
                   </td>
                 </tr>
               ) : (
                 waitlist.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium">{entry.waitlist_position}</td>
-                    <td className="px-4 py-3 text-sm">
-                      <div className="font-medium">{entry.contact_name}</div>
-                      <div className="text-gray-500 text-xs">{entry.last_name}</div>
+                  <tr key={entry.id}>
+                    <td style={{ fontWeight: '600' }}>{entry.waitlist_position}</td>
+                    <td>
+                      <div style={{ fontWeight: '500' }}>{entry.contact_name}</div>
+                      {entry.last_name && <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>{entry.last_name}</div>}
                     </td>
-                    <td className="px-4 py-3 text-sm">
-                      <div>{entry.email}</div>
-                      <div className="text-gray-500 text-xs">{entry.phone}</div>
+                    <td>
+                      <div>{entry.email || '-'}</div>
+                      {entry.phone && <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>{entry.phone}</div>}
                     </td>
-                    <td className="px-4 py-3 text-sm">
-                      <div>{entry.city}, {entry.state_province}</div>
-                      <div className="text-gray-500 text-xs">{entry.postal_code}</div>
+                    <td>
+                      {entry.city || entry.state_province ? (
+                        <>
+                          <div>{[entry.city, entry.state_province].filter(Boolean).join(', ')}</div>
+                          {entry.postal_code && <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>{entry.postal_code}</div>}
+                        </>
+                      ) : '-'}
                     </td>
-                    <td className="px-4 py-3 text-sm">
-                      <div className="text-xs">
-                        {entry.sponsor_1 && <div>1: {entry.sponsor_1}</div>}
-                        {entry.sponsor_2 && <div>2: {entry.sponsor_2}</div>}
-                      </div>
+                    <td style={{ fontSize: '13px' }}>
+                      {entry.sponsor_1 && <div>1: {entry.sponsor_1}</div>}
+                      {entry.sponsor_2 && <div>2: {entry.sponsor_2}</div>}
+                      {!entry.sponsor_1 && !entry.sponsor_2 && '-'}
                     </td>
-                    <td className="px-4 py-3 text-sm">
+                    <td>
                       {entry.date_application_received
                         ? new Date(entry.date_application_received).toLocaleDateString()
                         : '-'}
                     </td>
-                    <td className="px-4 py-3 text-sm font-medium">
-                      {getDaysWaiting(entry.date_application_received)}
+                    <td style={{ fontWeight: '500' }}>
+                      {getDaysWaiting(entry.date_application_received)} days
                     </td>
-                    <td className="px-4 py-3 text-sm">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        entry.status === 'approved' ? 'bg-green-100 text-green-800' :
-                        entry.status === 'contacted' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {entry.status || 'pending'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <div className="flex items-center gap-1">
+                    <td>{getStatusBadge(entry.status)}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '4px' }}>
                         <button
                           onClick={() => moveUp(entry)}
                           disabled={entry.waitlist_position === 1}
-                          className="p-1 text-gray-600 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                          className="btn btn-sm btn-icon btn-secondary"
                           title="Move up"
                         >
-                          <ArrowUp className="w-4 h-4" />
+                          <ArrowUp size={14} />
                         </button>
                         <button
                           onClick={() => moveDown(entry)}
                           disabled={entry.waitlist_position === waitlist.length}
-                          className="p-1 text-gray-600 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                          className="btn btn-sm btn-icon btn-secondary"
                           title="Move down"
                         >
-                          <ArrowDown className="w-4 h-4" />
+                          <ArrowDown size={14} />
                         </button>
                         <button
                           onClick={() => removeFromWaitlist(entry)}
-                          className="p-1 text-gray-600 hover:text-red-600"
-                          title="Remove from waitlist"
+                          className="btn btn-sm btn-icon btn-danger"
+                          title="Remove"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
