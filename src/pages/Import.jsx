@@ -39,70 +39,93 @@ export default function Import() {
     const results = { success: 0, failed: 0, errors: [] };
     
     try {
-      for (const member of parseResult.valid) {
-        try {
-          // Insert member
-          const { data, error } = await supabase
-            .from('members')
-            .insert([{
-              member_number: member.member_number,
-              first_name: member.first_name,
-              last_name: member.last_name,
-              date_of_birth: member.date_of_birth,
-              original_join_date: member.original_join_date,
-              tier: member.tier,
-              status: member.status,
-              email: member.email || null,
-              phone: member.phone || null,
-              address_street: member.address_street || null,
-              address_city: member.address_city || null,
-              address_state: member.address_state || null,
-              address_zip: member.address_zip || null,
-              assessment_years_completed: member.assessment_years_completed,
-              notes: member.notes || null
-            }])
-            .select()
-            .single();
-          
-          if (error) throw error;
-          
-          // Add encumbrance if specified
-          if (member.has_encumbrance && member.encumbrance_reason) {
-            await supabase.from('encumbrances').insert([{
-              member_id: data.id,
-              date_applied: member.encumbrance_date || member.original_join_date,
-              reason: member.encumbrance_reason
-            }]);
+      // Prepare all members for batch insert
+      const membersToInsert = parseResult.valid.map(member => ({
+        member_number: String(member.member_number),
+        first_name: member.first_name,
+        last_name: member.last_name,
+        date_of_birth: member.date_of_birth,
+        original_join_date: member.original_join_date,
+        tier: member.tier,
+        status: member.status,
+        email: member.email || null,
+        phone: member.phone || null,
+        address_street: member.address_street || null,
+        address_city: member.address_city || null,
+        address_state: member.address_state || null,
+        address_zip: member.address_zip ? String(member.address_zip) : null,
+        assessment_years_completed: member.assessment_years_completed || 0,
+        notes: member.notes || null
+      }));
+
+      // Batch insert in chunks of 100
+      const chunkSize = 100;
+      const insertedMembers = [];
+      
+      for (let i = 0; i < membersToInsert.length; i += chunkSize) {
+        const chunk = membersToInsert.slice(i, i + chunkSize);
+        const { data, error } = await supabase
+          .from('members')
+          .insert(chunk)
+          .select('id, member_number, tier, status, original_join_date');
+        
+        if (error) {
+          console.error('Batch insert error:', error);
+          results.failed += chunk.length;
+          results.errors.push({ member: `Batch ${Math.floor(i/chunkSize) + 1}`, error: error.message });
+        } else {
+          results.success += data.length;
+          insertedMembers.push(...data);
+        }
+      }
+
+      // Batch insert tier_history and status_history
+      if (insertedMembers.length > 0) {
+        const tierHistoryRecords = insertedMembers.map(m => ({
+          member_id: m.id,
+          old_tier: null,
+          new_tier: m.tier,
+          effective_date: m.original_join_date,
+          reason: 'Imported'
+        }));
+
+        const statusHistoryRecords = insertedMembers.map(m => ({
+          member_id: m.id,
+          old_status: null,
+          new_status: m.status,
+          change_date: m.original_join_date,
+          reason: 'Imported'
+        }));
+
+        // Insert history in chunks
+        for (let i = 0; i < tierHistoryRecords.length; i += chunkSize) {
+          await supabase.from('tier_history').insert(tierHistoryRecords.slice(i, i + chunkSize));
+          await supabase.from('status_history').insert(statusHistoryRecords.slice(i, i + chunkSize));
+        }
+
+        // Handle encumbrances for members that have them
+        const encumbranceMembers = parseResult.valid.filter(m => m.has_encumbrance && m.encumbrance_reason);
+        if (encumbranceMembers.length > 0) {
+          const encumbranceRecords = encumbranceMembers.map(m => {
+            const inserted = insertedMembers.find(im => String(im.member_number) === String(m.member_number));
+            if (!inserted) return null;
+            return {
+              member_id: inserted.id,
+              date_applied: m.encumbrance_date || m.original_join_date,
+              reason: m.encumbrance_reason
+            };
+          }).filter(Boolean);
+
+          if (encumbranceRecords.length > 0) {
+            await supabase.from('encumbrances').insert(encumbranceRecords);
           }
-          
-          // Log initial tier
-          await supabase.from('tier_history').insert([{
-            member_id: data.id,
-            old_tier: null,
-            new_tier: member.tier,
-            effective_date: member.original_join_date,
-            reason: 'Imported from CivicCRM'
-          }]);
-          
-          // Log initial status
-          await supabase.from('status_history').insert([{
-            member_id: data.id,
-            old_status: null,
-            new_status: member.status,
-            change_date: member.original_join_date,
-            reason: 'Imported from CivicCRM'
-          }]);
-          
-          results.success++;
-        } catch (err) {
-          results.failed++;
-          results.errors.push({ member: member.member_number, error: err.message });
         }
       }
       
       setImportResult(results);
     } catch (err) {
-      setImportResult({ success: 0, failed: parseResult.valid.length, errors: [{ member: 'All', error: err.message }] });
+      console.error('Import error:', err);
+      setImportResult({ success: results.success, failed: parseResult.valid.length - results.success, errors: [{ member: 'All', error: err.message }] });
     } finally {
       setImporting(false);
     }
