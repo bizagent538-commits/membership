@@ -59,7 +59,8 @@ export function useMembers() {
       const { data, error } = await supabase
         .from('members')
         .select('*')
-        .order('last_name', { ascending: true });
+        .order('last_name', { ascending: true })
+        .range(0, 4999);  // Override default 1000 row limit
       
       if (error) throw error;
       setMembers(data || []);
@@ -166,7 +167,8 @@ export function useDashboardStats() {
       
       const { data: members } = await supabase
         .from('members')
-        .select('tier, status');
+        .select('tier, status')
+        .range(0, 4999);  // Override default 1000 row limit
       
       const { data: eligibleMembers } = await supabase
         .from('life_eligibility_log')
