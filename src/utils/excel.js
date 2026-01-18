@@ -122,22 +122,31 @@ export function parseImportedExcel(file) {
             console.warn(`Invalid join date at row ${index + 1}:`, joinDate);
           }
           
-          // Normalize tier
+          // Normalize tier and status
           let normalizedTier = tier;
+          let normalizedStatus = status;
           const tierLower = (tier || '').toLowerCase();
-          if (tierLower.includes('regular')) normalizedTier = 'Regular';
+          const statusLower = (status || '').toLowerCase();
+          
+          // Handle "Deceased Member" as a tier (it's actually a status)
+          if (tierLower.includes('deceased')) {
+            normalizedTier = 'Regular';
+            normalizedStatus = 'Deceased';
+          } else if (tierLower.includes('regular')) normalizedTier = 'Regular';
           else if (tierLower.includes('absentee')) normalizedTier = 'Absentee';
           else if (tierLower.includes('life')) normalizedTier = 'Life';
           else if (tierLower.includes('honorary')) normalizedTier = 'Honorary';
           else if (tierLower.includes('waitlist') || tierLower.includes('wait list')) normalizedTier = 'Waitlist';
+          else normalizedTier = 'Regular'; // Default to Regular for unknown tiers
           
-          // Normalize status
-          let normalizedStatus = status;
-          const statusLower = (status || '').toLowerCase();
-          if (statusLower.includes('active')) normalizedStatus = 'Active';
-          else if (statusLower.includes('deceased')) normalizedStatus = 'Deceased';
-          else if (statusLower.includes('resigned')) normalizedStatus = 'Resigned';
-          else if (statusLower.includes('expelled')) normalizedStatus = 'Expelled';
+          // Normalize status (only if not already set by tier processing)
+          if (normalizedStatus === status) {
+            if (statusLower.includes('active')) normalizedStatus = 'Active';
+            else if (statusLower.includes('deceased')) normalizedStatus = 'Deceased';
+            else if (statusLower.includes('resigned')) normalizedStatus = 'Resigned';
+            else if (statusLower.includes('expelled')) normalizedStatus = 'Expelled';
+            else normalizedStatus = 'Active'; // Default to Active
+          }
           
           return {
             row: index + 2, // Excel row number (1-indexed + header)
@@ -195,17 +204,27 @@ export function validateImportedMembers(members) {
     
     if (!member.first_name) rowErrors.push('Missing first name');
     if (!member.last_name) rowErrors.push('Missing last name');
-    if (!member.date_of_birth) rowErrors.push('Missing or invalid date of birth');
-    if (!member.original_join_date) rowErrors.push('Missing or invalid join date');
     
-    // Validate tier
-    if (!['Regular', 'Absentee', 'Life', 'Honorary', 'Waitlist'].includes(member.tier)) {
-      rowErrors.push(`Invalid tier: ${member.tier}`);
+    // Dates are optional - use defaults if missing
+    if (!member.date_of_birth) {
+      rowWarnings.push('Missing date of birth - using 1900-01-01');
+      member.date_of_birth = '1900-01-01';
+    }
+    if (!member.original_join_date) {
+      rowWarnings.push('Missing join date - using 1900-01-01');
+      member.original_join_date = '1900-01-01';
     }
     
-    // Validate status
+    // Tier validation - already normalized, so these should always pass
+    if (!['Regular', 'Absentee', 'Life', 'Honorary', 'Waitlist'].includes(member.tier)) {
+      rowWarnings.push(`Unknown tier "${member.tier}" - defaulting to Regular`);
+      member.tier = 'Regular';
+    }
+    
+    // Status validation - already normalized, so these should always pass
     if (!['Active', 'Deceased', 'Resigned', 'Expelled'].includes(member.status)) {
-      rowErrors.push(`Invalid status: ${member.status}`);
+      rowWarnings.push(`Unknown status "${member.status}" - defaulting to Active`);
+      member.status = 'Active';
     }
     
     // Validate assessment years
