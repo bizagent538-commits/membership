@@ -58,7 +58,14 @@ export function getProrationPercentage(quarter) {
 
 // Calculate age from date of birth
 export function calculateAge(dateOfBirth) {
-  const dob = new Date(dateOfBirth);
+  if (!dateOfBirth) return null;
+  
+  // Parse date as local date to avoid timezone shifts
+  // If date is "1985-10-02", split and use local date constructor
+  const dateStr = dateOfBirth.split('T')[0]; // Get just the date part
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const dob = new Date(year, month - 1, day); // Month is 0-indexed
+  
   const today = new Date();
   let age = today.getFullYear() - dob.getFullYear();
   const monthDiff = today.getMonth() - dob.getMonth();
@@ -72,7 +79,13 @@ export function calculateAge(dateOfBirth) {
 
 // Calculate consecutive years of membership
 export function calculateConsecutiveYears(originalJoinDate) {
-  const joinDate = new Date(originalJoinDate);
+  if (!originalJoinDate) return 0;
+  
+  // Parse as local date to avoid timezone shifts
+  const dateStr = originalJoinDate.split('T')[0];
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const joinDate = new Date(year, month - 1, day);
+  
   const today = new Date();
   
   let years = today.getFullYear() - joinDate.getFullYear();
@@ -241,7 +254,13 @@ export function formatCurrency(amount) {
 // Format date for display
 export function formatDate(date) {
   if (!date) return '';
-  return new Date(date).toLocaleDateString('en-US', {
+  
+  // Parse as local date to avoid timezone shifts
+  const dateStr = date.split('T')[0];
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
+  
+  return d.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric'
