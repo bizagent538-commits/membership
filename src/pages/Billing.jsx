@@ -316,7 +316,15 @@ export default function Billing() {
                       </td>
                       <td>{bill.tier}</td>
                       <td>{formatCurrency(bill.dues)}</td>
-                      <td>{bill.assessment > 0 ? formatCurrency(bill.assessment) : '—'}</td>
+                      <td>
+                        {bill.assessment > 0 ? (
+                          formatCurrency(bill.assessment)
+                        ) : bill.assessment_years_completed < 5 ? (
+                          <span style={{ fontSize: '12px', color: '#6b7280' }}>—</span>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: '#059669' }}>✓ Complete</span>
+                        )}
+                      </td>
                       <td>
                         {bill.tier === 'Regular' ? (
                           <span>{bill.work_hours_completed}/{bill.workHoursRequired}</span>

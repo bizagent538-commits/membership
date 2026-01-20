@@ -39,15 +39,17 @@ export function getFiscalYearFromDate(date) {
   }
 }
 
-// Get quarter within fiscal year (Q1=Jul-Sep, Q2=Oct-Dec, Q3=Jan-Mar, Q4=Apr-Jun)
+// Get quarter within billing year (Q1=Mar-May, Q2=Jun-Aug, Q3=Sep-Nov, Q4=Dec-Feb)
+// Billing year runs March 1 - February 28
 export function getFiscalQuarter(date) {
   const d = new Date(date);
-  const month = d.getMonth() + 1;
+  const month = d.getMonth() + 1; // 1-12
   
-  if (month >= 7 && month <= 9) return 1;
-  if (month >= 10 && month <= 12) return 2;
-  if (month >= 1 && month <= 3) return 3;
-  return 4;
+  // March 1 is start of billing year
+  if (month >= 3 && month <= 5) return 1;  // Q1: Mar-May (100% - start of year)
+  if (month >= 6 && month <= 8) return 2;  // Q2: Jun-Aug (75%)
+  if (month >= 9 && month <= 11) return 3; // Q3: Sep-Nov (50%)
+  return 4; // Q4: Dec-Feb (25% - end of year)
 }
 
 // Get proration percentage based on quarter
@@ -154,10 +156,32 @@ export function calculateBilling(member, settings, workHoursCompleted = 0) {
   
   // For new members, calculate proration
   // For existing members, use full amounts
-  const joinYear = new Date(member.original_join_date).getFullYear();
-  const currentYear = new Date().getFullYear();
-  const isNewMember = joinYear === currentYear || 
-    (joinYear === currentYear - 1 && new Date().getMonth() < 6);
+  // Billing year runs March 1 - Feb 28
+  const now = new Date();
+  const joinDate = new Date(member.original_join_date);
+  const currentMonth = now.getMonth() + 1; // 1-12
+  const currentYear = now.getFullYear();
+  const joinMonth = joinDate.getMonth() + 1;
+  const joinYear = joinDate.getFullYear();
+  
+  // Calculate which billing year we're in (starts March 1)
+  let currentBillingYear;
+  if (currentMonth >= 3) {
+    currentBillingYear = currentYear; // Mar-Dec 2026 = 2026 billing year
+  } else {
+    currentBillingYear = currentYear - 1; // Jan-Feb 2026 = 2025 billing year
+  }
+  
+  // Calculate which billing year they joined in
+  let joinBillingYear;
+  if (joinMonth >= 3) {
+    joinBillingYear = joinYear;
+  } else {
+    joinBillingYear = joinYear - 1;
+  }
+  
+  // If they joined this billing year, give prorated dues
+  const isNewMember = joinBillingYear === currentBillingYear;
   
   if (isNewMember) {
     result.dues = calculateProratedDues(baseDues, member.original_join_date);
