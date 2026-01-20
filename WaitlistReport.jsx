@@ -206,6 +206,8 @@ export default function WaitlistReport() {
         ? lines[0].split('\t').map(h => h.trim().toLowerCase())
         : lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
       
+      console.log('Headers found:', headers);
+      
       const delimiter = lines[0].split('\t').length > 1 ? '\t' : ',';
       
       const entries = [];
@@ -226,7 +228,21 @@ export default function WaitlistReport() {
         
         if (!fullName) continue;
 
-        entries.push({
+        // Parse date properly
+        const dateStr = row['date application received'] || row['date_application_received'] || row['date applied'] || row['applied'] || '';
+        let parsedDate = null;
+        if (dateStr) {
+          try {
+            const d = new Date(dateStr);
+            if (!isNaN(d.getTime())) {
+              parsedDate = d.toISOString().split('T')[0]; // Convert to YYYY-MM-DD
+            }
+          } catch (err) {
+            console.warn('Failed to parse date:', dateStr);
+          }
+        }
+
+        const entry = {
           waitlist_position: parseInt(row['position'] || row['waitlist_position']) || (waitlist.length + entries.length + 1),
           last_name: lastName,
           contact_name: fullName,
@@ -238,10 +254,15 @@ export default function WaitlistReport() {
           postal_code: row['postal code'] || row['postal_code'] || row['zip'] || '',
           sponsor_1: row['sponsor #1'] || row['sponsor_1'] || row['sponsor 1'] || '',
           sponsor_2: row['sponsor #2'] || row['sponsor_2'] || row['sponsor 2'] || '',
-          date_application_received: row['date application received'] || row['date_application_received'] || row['date applied'] || row['applied'] || null,
+          date_application_received: parsedDate,
           status: row['status'] || 'pending'
-        });
+        };
+        
+        console.log('Entry being added:', entry);
+        entries.push(entry);
       }
+
+      console.log(`Prepared ${entries.length} entries for import`);
 
       if (entries.length > 0) {
         const { error } = await supabase.from('waitlist').insert(entries);
