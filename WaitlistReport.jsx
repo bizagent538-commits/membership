@@ -238,7 +238,7 @@ export default function WaitlistReport() {
           postal_code: row['postal code'] || row['postal_code'] || row['zip'] || '',
           sponsor_1: row['sponsor #1'] || row['sponsor_1'] || row['sponsor 1'] || '',
           sponsor_2: row['sponsor #2'] || row['sponsor_2'] || row['sponsor 2'] || '',
-          date_application_received: row['date application received'] || row['date_application_received'] || row['date applied'] || null,
+          date_application_received: row['date application received'] || row['date_application_received'] || row['date applied'] || row['applied'] || null,
           status: row['status'] || 'pending'
         });
       }
