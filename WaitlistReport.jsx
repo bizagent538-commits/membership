@@ -195,31 +195,56 @@ export default function WaitlistReport() {
   };
 
   const handleImport = async (e) => {
+    console.log('handleImport called!', e);
     const file = e.target.files?.[0];
-    if (!file) return;
+    console.log('Selected file:', file);
+    if (!file) {
+      console.log('No file selected, returning');
+      return;
+    }
 
     setImporting(true);
     try {
       const text = await file.text();
-      const lines = text.split('\n').filter(line => line.trim());
-      const headers = lines[0].split('\t').length > 1 
-        ? lines[0].split('\t').map(h => h.trim().toLowerCase())
-        : lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+      console.log('File text loaded, length:', text.length);
       
+      // Proper CSV parsing that handles quoted fields with commas
+      const parseCSVLine = (line) => {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        result.push(current.trim());
+        return result;
+      };
+      
+      const lines = text.split(/\r?\n/).filter(line => line.trim());
+      console.log('Total lines:', lines.length);
+      
+      const headerValues = parseCSVLine(lines[0]);
+      const headers = headerValues.map(h => h.toLowerCase().replace(/['"]/g, ''));
       console.log('Headers found:', headers);
-      
-      const delimiter = lines[0].split('\t').length > 1 ? '\t' : ',';
       
       const entries = [];
       for (let i = 1; i < lines.length; i++) {
-        const values = delimiter === '\t' 
-          ? lines[i].split('\t').map(v => v.trim())
-          : lines[i].match(/(".*?"|[^,]+)/g)?.map(v => v.replace(/^"|"$/g, '').trim()) || [];
+        const values = parseCSVLine(lines[i]);
         if (values.length === 0) continue;
 
         const row = {};
         headers.forEach((h, idx) => {
-          row[h] = values[idx] || '';
+          row[h] = (values[idx] || '').replace(/^"|"$/g, ''); // Remove surrounding quotes
         });
 
         const firstName = row['first name'] || row['first_name'] || row['firstname'] || '';
@@ -258,15 +283,20 @@ export default function WaitlistReport() {
           status: row['status'] || 'pending'
         };
         
-        console.log('Entry being added:', entry);
+        console.log(`Entry ${i}:`, entry);
         entries.push(entry);
       }
 
       console.log(`Prepared ${entries.length} entries for import`);
 
       if (entries.length > 0) {
-        const { error } = await supabase.from('waitlist').insert(entries);
-        if (error) throw error;
+        console.log('Inserting into database...');
+        const { data, error } = await supabase.from('waitlist').insert(entries);
+        if (error) {
+          console.error('Insert error:', error);
+          throw error;
+        }
+        console.log('Insert successful:', data);
         alert(`Imported ${entries.length} waitlist entries`);
         loadWaitlist();
       } else {
