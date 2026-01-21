@@ -80,9 +80,9 @@ export default function LifeEligibility() {
         
         // Check if within 2 years of any eligibility
         const nearLongevity = years >= 28 && years < 30;
-        const nearStandard = age >= 60 && years >= 18 && years < 20;
-        const nearLegacy = age >= 60 && years >= 8 && years < 10 && 
-          new Date(member.original_join_date) < new Date('2011-07-01');
+        const nearStandard = age >= 60 && age < 62 && years >= 20;  // Has service, needs age
+        const nearLegacy = age >= 60 && age < 62 && years >= 10 && 
+          new Date(member.original_join_date) < new Date('2011-07-01');  // Has service, needs age
         
         // Calculate best path to eligibility
         let statusMessage = '';
