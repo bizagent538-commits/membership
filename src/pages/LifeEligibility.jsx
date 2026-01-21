@@ -84,13 +84,51 @@ export default function LifeEligibility() {
         const nearLegacy = age >= 60 && years >= 8 && years < 10 && 
           new Date(member.original_join_date) < new Date('2011-07-01');
         
+        // Calculate best path to eligibility
+        let statusMessage = '';
+        const yearsToLongevity = 30 - years;
+        const yearsToAge = Math.max(0, 62 - age);
+        const yearsToService = years >= 20 ? 0 : 20 - years;
+        
+        // Determine the closest path
+        if (nearLongevity) {
+          // Close to longevity (28-29 years)
+          statusMessage = `${yearsToLongevity} years until longevity eligible`;
+        } else if (nearStandard) {
+          // Close to standard rule (60+ age, 18-19 years service)
+          if (yearsToAge === 0) {
+            // Already 62+, just need more service years
+            statusMessage = `${yearsToService} more years of membership needed`;
+          } else if (yearsToService === 0) {
+            // Already 20+ years, just need to reach 62
+            statusMessage = `${yearsToAge} years until age eligible`;
+          } else {
+            // Need both - show whichever is closer
+            if (yearsToAge <= yearsToService) {
+              statusMessage = `${yearsToAge} years until age eligible`;
+            } else {
+              statusMessage = `${yearsToService} more years of membership needed`;
+            }
+          }
+        } else if (nearLegacy) {
+          // Close to legacy rule (60+ age, 8-9 years service, joined before 2011)
+          if (age >= 62) {
+            statusMessage = `${10 - years} more years of membership needed (legacy rule)`;
+          } else {
+            statusMessage = `${yearsToAge} years until age eligible (legacy rule)`;
+          }
+        } else {
+          statusMessage = eligibility.reason;
+        }
+        
         return {
           ...member,
           age,
           consecutiveYears: years,
           hasEncumbrance,
           eligibility,
-          isNear: nearLongevity || nearStandard || nearLegacy
+          isNear: nearLongevity || nearStandard || nearLegacy,
+          statusMessage
         };
       })
       .filter(m => !m.eligibility.eligible && m.isNear);
@@ -354,7 +392,7 @@ export default function LifeEligibility() {
                       <td>{member.consecutiveYears}</td>
                       <td>
                         <span style={{ color: '#6b7280', fontSize: '13px' }}>
-                          {member.eligibility.reason}
+                          {member.statusMessage}
                         </span>
                       </td>
                     </tr>
