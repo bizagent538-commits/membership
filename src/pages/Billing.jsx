@@ -77,21 +77,24 @@ export default function Billing() {
     
     const activeMembers = members.filter(m => m.status === 'Active');
     
-    const allBilling = activeMembers.map(member => {
-      const workHours = workHoursByMember[member.id] || 0;
-      const billing = calculateBilling(member, settings, workHours);
-      const yearRecord = membershipYears.find(y => y.member_id === member.id);
-      
-      return {
-        ...member,
-        ...billing,
-        work_hours_completed: workHours,
-        work_hours_short: billing.workHoursShort,
-        payment_status: yearRecord?.payment_status || 'Unpaid',
-        total_paid: yearRecord?.total_paid || 0,
-        membership_year_id: yearRecord?.id
-      };
-    }).filter(m => m.total > 0); // Only show members with bills
+    const allBilling = activeMembers
+      .map(member => {
+        const workHours = workHoursByMember[member.id] || 0;
+        const billing = calculateBilling(member, settings, workHours);
+        const yearRecord = membershipYears.find(y => y.member_id === member.id);
+        
+        return {
+          ...member,
+          ...billing,
+          work_hours_completed: workHours,
+          work_hours_short: billing.workHoursShort,
+          payment_status: yearRecord?.payment_status || 'Unpaid',
+          total_paid: yearRecord?.total_paid || 0,
+          membership_year_id: yearRecord?.id
+        };
+      })
+      .filter(m => m.membership_year_id) // ONLY show members with generated bills
+      .filter(m => m.total > 0); // Only show members with bills
     
     // Apply search and filters
     return allBilling.filter(bill => {
