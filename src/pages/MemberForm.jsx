@@ -28,6 +28,7 @@ export default function MemberForm() {
     address_city: '',
     address_state: 'CT',
     address_zip: '',
+    key_fob_number: '',
     original_join_date: '',
     tier: searchParams.get('tier') || 'Regular',
     status: 'Active',
@@ -63,6 +64,7 @@ export default function MemberForm() {
         address_city: data.address_city || '',
         address_state: data.address_state || 'CT',
         address_zip: data.address_zip || '',
+        key_fob_number: data.key_fob_number || '',
         original_join_date: formatDateForInput(data.original_join_date) || '',
         tier: data.tier || 'Regular',
         status: data.status || 'Active',
@@ -323,6 +325,17 @@ export default function MemberForm() {
                 />
               </div>
               <div className="form-group">
+                <label className="form-label">Key Fob Number *</label>
+                <input
+                  type="text"
+                  name="key_fob_number"
+                  className="form-input"
+                  value={form.key_fob_number}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div className="form-group">
                 <label className="form-label">Tier *</label>
                 <select
                   name="tier"
@@ -338,6 +351,9 @@ export default function MemberForm() {
                   {!isEdit && <option value="Promote">Promote from Waitlist</option>}
                 </select>
               </div>
+            </div>
+
+            <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Status *</label>
                 <select
@@ -353,9 +369,6 @@ export default function MemberForm() {
                   <option value="Expelled">Expelled</option>
                 </select>
               </div>
-            </div>
-
-            <div className="form-row">
               <div className="form-group">
                 <label className="form-label">First Name *</label>
                 <input

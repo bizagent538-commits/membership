@@ -237,6 +237,10 @@ export default function MemberDetail() {
             <span className="detail-value">{member.phone || '—'}</span>
           </div>
           <div className="detail-row">
+            <span className="detail-label">Key Fob Number</span>
+            <span className="detail-value">{member.key_fob_number || '—'}</span>
+          </div>
+          <div className="detail-row">
             <span className="detail-label">Address</span>
             <span className="detail-value">
               {member.address_street ? (
