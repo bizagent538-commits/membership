@@ -62,21 +62,40 @@ export function getProrationPercentage(quarter) {
 export function calculateAge(dateOfBirth) {
   if (!dateOfBirth) return null;
   
-  // Parse date as local date to avoid timezone shifts
-  // If date is "1985-10-02", split and use local date constructor
-  const dateStr = dateOfBirth.split('T')[0]; // Get just the date part
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const dob = new Date(year, month - 1, day); // Month is 0-indexed
-  
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const monthDiff = today.getMonth() - dob.getMonth();
-  
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-    age--;
+  try {
+    // Parse date as local date to avoid timezone shifts
+    // If date is "1985-10-02", split and use local date constructor
+    const dateStr = dateOfBirth.split('T')[0]; // Get just the date part
+    const parts = dateStr.split('-');
+    
+    // Validate we have 3 parts
+    if (parts.length !== 3) return null;
+    
+    const [year, month, day] = parts.map(Number);
+    
+    // Validate date parts
+    if (!year || !month || !day || year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) {
+      return null;
+    }
+    
+    const dob = new Date(year, month - 1, day); // Month is 0-indexed
+    const today = new Date();
+    
+    // If birthdate is in the future, return null instead of negative
+    if (dob > today) return null;
+    
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      age--;
+    }
+    
+    return age;
+  } catch (err) {
+    console.error('Error calculating age:', err);
+    return null;
   }
-  
-  return age;
 }
 
 // Calculate consecutive years of membership
