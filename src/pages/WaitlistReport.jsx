@@ -204,6 +204,8 @@ export default function WaitlistReport() {
       const lines = text.split('\n').filter(line => line.trim());
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
       
+      console.log('📋 CSV Headers found:', headers);
+      
       const entries = [];
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].match(/(".*?"|[^,]+)/g)?.map(v => v.replace(/^"|"$/g, '').trim()) || [];
@@ -219,22 +221,52 @@ export default function WaitlistReport() {
         const fullName = row['contact_name'] || row['contact name'] || row['name'] || 
                          (firstName && lastName ? `${firstName} ${lastName}` : firstName || lastName);
         
-        entries.push({
+        // Parse date (handle MM/DD/YYYY or YYYY-MM-DD formats)
+        let parsedDate = null;
+        const dateStr = row['date application received'] || row['date_application_received'] || row['date applied'] || '';
+        if (dateStr) {
+          // If format is MM/DD/YYYY, convert to YYYY-MM-DD
+          if (dateStr.includes('/')) {
+            const parts = dateStr.split('/');
+            if (parts.length === 3) {
+              const month = parts[0].padStart(2, '0');
+              const day = parts[1].padStart(2, '0');
+              const year = parts[2];
+              parsedDate = `${year}-${month}-${day}`;
+            }
+          } else {
+            parsedDate = dateStr;
+          }
+        }
+        
+        const entry = {
           waitlist_position: parseInt(row['position'] || row['waitlist_position']) || (waitlist.length + entries.length + 1),
           last_name: lastName,
           contact_name: fullName,
           email: row['email'] || '',
           phone: row['phone'] || '',
-          street_address: row['street_address'] || row['address'] || '',
+          street_address: row['street_address'] || row['street address'] || row['address'] || '',
           city: row['city'] || '',
-          state_province: row['state_province'] || row['state'] || '',
-          postal_code: row['postal_code'] || row['zip'] || '',
-          sponsor_1: row['sponsor_1'] || row['sponsor 1'] || '',
-          sponsor_2: row['sponsor_2'] || row['sponsor 2'] || '',
-          date_application_received: row['date_application_received'] || row['date applied'] || null,
+          state_province: row['state_province'] || row['state/province'] || row['state'] || '',
+          postal_code: row['postal_code'] || row['postal code'] || row['zip'] || '',
+          sponsor_1: row['sponsor #1'] || row['sponsor_1'] || row['sponsor 1'] || row['sponsor#1'] || '',
+          sponsor_2: row['sponsor #2'] || row['sponsor_2'] || row['sponsor 2'] || row['sponsor#2'] || '',
+          date_application_received: parsedDate,
           status: row['status'] || 'pending'
-        });
+        };
+        
+        // Log first entry for debugging
+        if (i === 1) {
+          console.log('🔍 First row parsed:', entry);
+          console.log('   Sponsor 1:', entry.sponsor_1);
+          console.log('   Sponsor 2:', entry.sponsor_2);
+          console.log('   Date Applied:', entry.date_application_received);
+        }
+        
+        entries.push(entry);
       }
+
+      console.log(`✅ Prepared ${entries.length} entries for import`);
 
       if (entries.length > 0) {
         const { error } = await supabase.from('waitlist').insert(entries);

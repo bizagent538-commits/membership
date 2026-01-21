@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useMembers, useSettings } from '../hooks/useData';
 import { supabase } from '../lib/supabase';
-import { Clock, Plus, Check, X } from 'lucide-react';
+import { Clock, Plus, Check, X, Search } from 'lucide-react';
 import { formatDate, getCurrentWorkYear, getWorkHourReviewStatus } from '../utils/calculations';
 
 export default function WorkHours() {
@@ -10,6 +10,8 @@ export default function WorkHours() {
   const { settings } = useSettings();
   const [workHours, setWorkHours] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({
     member_id: '',
@@ -50,7 +52,7 @@ export default function WorkHours() {
     
     const regularMembers = members.filter(m => m.tier === 'Regular' && m.status === 'Active');
     
-    return regularMembers.map(member => {
+    const allSummary = regularMembers.map(member => {
       const memberHours = workHours.filter(h => h.member_id === member.id);
       const totalHours = memberHours.reduce((sum, h) => sum + parseFloat(h.hours_worked), 0);
       const approvedHours = memberHours.filter(h => h.approved).reduce((sum, h) => sum + parseFloat(h.hours_worked), 0);
@@ -65,7 +67,21 @@ export default function WorkHours() {
         entries: memberHours.length
       };
     }).sort((a, b) => a.last_name.localeCompare(b.last_name));
-  }, [members, workHours, requiredHours]);
+    
+    // Apply search and filters
+    return allSummary.filter(summary => {
+      const matchesSearch = search === '' || 
+        summary.first_name.toLowerCase().includes(search.toLowerCase()) ||
+        summary.last_name.toLowerCase().includes(search.toLowerCase()) ||
+        summary.member_number.toLowerCase().includes(search.toLowerCase());
+      
+      const matchesStatus = statusFilter === '' || 
+        (statusFilter === 'Complete' && summary.hoursShort === 0) ||
+        (statusFilter === 'Incomplete' && summary.hoursShort > 0);
+      
+      return matchesSearch && matchesStatus;
+    });
+  }, [members, workHours, requiredHours, search, statusFilter]);
 
   const handleAddHours = async (e) => {
     e.preventDefault();
@@ -187,6 +203,30 @@ export default function WorkHours() {
             {memberHoursSummary.filter(m => m.approvedHours >= requiredHours).length}
           </div>
         </div>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="filter-bar" style={{ marginTop: '24px', marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div className="search-box" style={{ flex: 1 }}>
+          <Search size={18} />
+          <input
+            type="text"
+            placeholder="Search members..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ border: 'none', outline: 'none', width: '100%' }}
+          />
+        </div>
+        <select 
+          className="form-select" 
+          value={statusFilter} 
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={{ width: 'auto' }}
+        >
+          <option value="">All Members</option>
+          <option value="Complete">Complete (100%)</option>
+          <option value="Incomplete">Incomplete</option>
+        </select>
       </div>
 
       {/* Tabs */}

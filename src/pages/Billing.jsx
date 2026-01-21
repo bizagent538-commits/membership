@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useMembers, useSettings } from '../hooks/useData';
 import { supabase } from '../lib/supabase';
-import { DollarSign, FileDown, Send, Check } from 'lucide-react';
+import { DollarSign, FileDown, Send, Check, Search } from 'lucide-react';
 import { 
   formatCurrency, 
   getCurrentFiscalYear, 
@@ -19,6 +19,9 @@ export default function Billing() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(null);
+  const [search, setSearch] = useState('');
+  const [tierFilter, setTierFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [paymentForm, setPaymentForm] = useState({
     amount: '',
     method: 'Check',
@@ -74,7 +77,7 @@ export default function Billing() {
     
     const activeMembers = members.filter(m => m.status === 'Active');
     
-    return activeMembers.map(member => {
+    const allBilling = activeMembers.map(member => {
       const workHours = workHoursByMember[member.id] || 0;
       const billing = calculateBilling(member, settings, workHours);
       const yearRecord = membershipYears.find(y => y.member_id === member.id);
@@ -89,7 +92,20 @@ export default function Billing() {
         membership_year_id: yearRecord?.id
       };
     }).filter(m => m.total > 0); // Only show members with bills
-  }, [members, settings, membershipYears, workHoursByMember]);
+    
+    // Apply search and filters
+    return allBilling.filter(bill => {
+      const matchesSearch = search === '' || 
+        bill.first_name.toLowerCase().includes(search.toLowerCase()) ||
+        bill.last_name.toLowerCase().includes(search.toLowerCase()) ||
+        bill.member_number.toLowerCase().includes(search.toLowerCase());
+      
+      const matchesTier = tierFilter === '' || bill.tier === tierFilter;
+      const matchesStatus = statusFilter === '' || bill.payment_status === statusFilter;
+      
+      return matchesSearch && matchesTier && matchesStatus;
+    });
+  }, [members, settings, membershipYears, workHoursByMember, search, tierFilter, statusFilter]);
 
   const handleGenerateBills = async () => {
     if (!confirm('Generate bills for all active members for fiscal year ' + fiscalYear + '?')) {
@@ -277,6 +293,41 @@ export default function Billing() {
           <div className="stat-label">Members Billed</div>
           <div className="stat-value">{billingData.length}</div>
         </div>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="filter-bar" style={{ marginTop: '24px', marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div className="search-box" style={{ flex: 1 }}>
+          <Search size={18} />
+          <input
+            type="text"
+            placeholder="Search members..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ border: 'none', outline: 'none', width: '100%' }}
+          />
+        </div>
+        <select 
+          className="form-select" 
+          value={tierFilter} 
+          onChange={(e) => setTierFilter(e.target.value)}
+          style={{ width: 'auto' }}
+        >
+          <option value="">All Tiers</option>
+          <option value="Regular">Regular</option>
+          <option value="Absentee">Absentee</option>
+        </select>
+        <select 
+          className="form-select" 
+          value={statusFilter} 
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={{ width: 'auto' }}
+        >
+          <option value="">All Statuses</option>
+          <option value="Paid">Paid</option>
+          <option value="Partial">Partial</option>
+          <option value="Unpaid">Unpaid</option>
+        </select>
       </div>
 
       {/* Billing Table */}
