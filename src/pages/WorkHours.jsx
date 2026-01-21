@@ -207,27 +207,28 @@ export default function WorkHours() {
       </div>
 
       {/* Search and Filters */}
-      <div className="filter-bar" style={{ marginTop: '24px', marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'center' }}>
-        <div className="search-box" style={{ flex: 1 }}>
+      <div className="search-bar">
+        <div className="search-input">
           <Search size={18} />
           <input
             type="text"
-            placeholder="Search members..."
+            placeholder="Search by name, member # or email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ border: 'none', outline: 'none', width: '100%' }}
           />
         </div>
-        <select 
-          className="form-select" 
-          value={statusFilter} 
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ width: 'auto' }}
-        >
-          <option value="">All Members</option>
-          <option value="Complete">Complete (100%)</option>
-          <option value="Incomplete">Incomplete</option>
-        </select>
+        <div className="filter-group">
+          <select 
+            className="form-select" 
+            value={statusFilter} 
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ width: 'auto' }}
+          >
+            <option value="">All Members</option>
+            <option value="Complete">Complete (100%)</option>
+            <option value="Incomplete">Incomplete</option>
+          </select>
+        </div>
       </div>
 
       {/* Tabs */}

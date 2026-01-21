@@ -297,38 +297,39 @@ export default function Billing() {
       </div>
 
       {/* Search and Filters */}
-      <div className="filter-bar" style={{ marginTop: '24px', marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'center' }}>
-        <div className="search-box" style={{ flex: 1 }}>
+      <div className="search-bar">
+        <div className="search-input">
           <Search size={18} />
           <input
             type="text"
-            placeholder="Search members..."
+            placeholder="Search by name, member # or email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ border: 'none', outline: 'none', width: '100%' }}
           />
         </div>
-        <select 
-          className="form-select" 
-          value={tierFilter} 
-          onChange={(e) => setTierFilter(e.target.value)}
-          style={{ width: 'auto' }}
-        >
-          <option value="">All Tiers</option>
-          <option value="Regular">Regular</option>
-          <option value="Absentee">Absentee</option>
-        </select>
-        <select 
-          className="form-select" 
-          value={statusFilter} 
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ width: 'auto' }}
-        >
-          <option value="">All Statuses</option>
-          <option value="Paid">Paid</option>
-          <option value="Partial">Partial</option>
-          <option value="Unpaid">Unpaid</option>
-        </select>
+        <div className="filter-group">
+          <select 
+            className="form-select" 
+            value={tierFilter} 
+            onChange={(e) => setTierFilter(e.target.value)}
+            style={{ width: 'auto' }}
+          >
+            <option value="">All Tiers</option>
+            <option value="Regular">Regular</option>
+            <option value="Absentee">Absentee</option>
+          </select>
+          <select 
+            className="form-select" 
+            value={statusFilter} 
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ width: 'auto' }}
+          >
+            <option value="">All Statuses</option>
+            <option value="Paid">Paid</option>
+            <option value="Partial">Partial</option>
+            <option value="Unpaid">Unpaid</option>
+          </select>
+        </div>
       </div>
 
       {/* Billing Table */}
