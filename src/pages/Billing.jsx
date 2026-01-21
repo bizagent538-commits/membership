@@ -51,11 +51,29 @@ export default function Billing() {
       
       setMembershipYears(years || []);
       
-      // Fetch approved work hours for all members
+      // Determine which work year to pull hours from
+      // Work year runs March 1 - Feb 28
+      // Billing runs April 1 - June (1st Wed)
+      // So we need LAST work year's hours for billing
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1; // 1-12
+      const currentYear = now.getFullYear();
+      
+      let workYearForBilling;
+      if (currentMonth >= 3) {
+        // March or later: use last year's work year (it just ended Feb 28)
+        workYearForBilling = `${currentYear - 1}-${currentYear}`;
+      } else {
+        // Jan-Feb: use the work year before that
+        workYearForBilling = `${currentYear - 2}-${currentYear - 1}`;
+      }
+      
+      // Fetch approved work hours for the billing work year
       const { data: hours } = await supabase
         .from('work_hours')
         .select('member_id, hours_worked')
-        .eq('approved', true);
+        .eq('approved', true)
+        .eq('work_year', workYearForBilling);
       
       const hoursByMember = {};
       (hours || []).forEach(h => {
