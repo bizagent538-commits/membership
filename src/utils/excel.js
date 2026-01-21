@@ -9,6 +9,7 @@ export function exportMembersToExcel(members, filename = 'members.xlsx') {
     'First Name': m.first_name,
     'Tier': m.tier,
     'Status': m.status,
+    'Key Fob Number': m.key_fob_number || '',
     'Email': m.email || '',
     'Phone': m.phone || '',
     'Address': m.address_street || '',
