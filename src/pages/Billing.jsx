@@ -98,7 +98,8 @@ export default function Billing() {
       const matchesSearch = search === '' || 
         bill.first_name.toLowerCase().includes(search.toLowerCase()) ||
         bill.last_name.toLowerCase().includes(search.toLowerCase()) ||
-        bill.member_number.toLowerCase().includes(search.toLowerCase());
+        bill.member_number.toLowerCase().includes(search.toLowerCase()) ||
+        (bill.email && bill.email.toLowerCase().includes(search.toLowerCase()));
       
       const matchesTier = tierFilter === '' || bill.tier === tierFilter;
       const matchesStatus = statusFilter === '' || bill.payment_status === statusFilter;

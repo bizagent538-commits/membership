@@ -73,7 +73,8 @@ export default function WorkHours() {
       const matchesSearch = search === '' || 
         summary.first_name.toLowerCase().includes(search.toLowerCase()) ||
         summary.last_name.toLowerCase().includes(search.toLowerCase()) ||
-        summary.member_number.toLowerCase().includes(search.toLowerCase());
+        summary.member_number.toLowerCase().includes(search.toLowerCase()) ||
+        (summary.email && summary.email.toLowerCase().includes(search.toLowerCase()));
       
       const matchesStatus = statusFilter === '' || 
         (statusFilter === 'Complete' && summary.hoursShort === 0) ||
