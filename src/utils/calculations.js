@@ -138,8 +138,77 @@ export function calculateProratedHours(baseHours, joinDate) {
   return Math.round(baseHours * proration * 10) / 10;
 }
 
+// Check if a date falls within the current billing year (March 1 - Feb 28)
+export function isDateInCurrentBillingYear(date) {
+  const d = new Date(date);
+  const now = new Date();
+  
+  const currentMonth = now.getMonth() + 1; // 1-12
+  const currentYear = now.getFullYear();
+  const checkMonth = d.getMonth() + 1;
+  const checkYear = d.getFullYear();
+  
+  // Determine current billing year start
+  let billingYearStart;
+  if (currentMonth >= 3) {
+    billingYearStart = new Date(currentYear, 2, 1); // March 1 this year
+  } else {
+    billingYearStart = new Date(currentYear - 1, 2, 1); // March 1 last year
+  }
+  
+  // Billing year end is Feb 28/29 of next year
+  const billingYearEnd = new Date(billingYearStart.getFullYear() + 1, 1, 28);
+  
+  return d >= billingYearStart && d <= billingYearEnd;
+}
+
+// Get the date when member becomes Life eligible (returns null if not eligible this year)
+export function getLifeEligibilityDate(member, hasActiveEncumbrance) {
+  if (hasActiveEncumbrance) return null;
+  if (member.tier === 'Life') return null;
+  if (member.status !== 'Active') return null;
+  
+  const joinDate = new Date(member.original_join_date);
+  const birthDate = new Date(member.date_of_birth);
+  const cutoffDate = new Date('2011-07-01');
+  
+  // Calculate when they hit 30 years (longevity rule)
+  const longevityDate = new Date(joinDate);
+  longevityDate.setFullYear(longevityDate.getFullYear() + 30);
+  
+  // Calculate when they turn 62 (age requirement)
+  const age62Date = new Date(birthDate);
+  age62Date.setFullYear(age62Date.getFullYear() + 62);
+  
+  const consecutiveYears = calculateConsecutiveYears(member.original_join_date);
+  const age = calculateAge(member.date_of_birth);
+  
+  // Longevity rule (30 years) - check if they hit 30 years this billing year
+  if (consecutiveYears >= 29 && consecutiveYears < 30) {
+    if (isDateInCurrentBillingYear(longevityDate)) {
+      return longevityDate;
+    }
+  }
+  
+  // Legacy rule (joined before July 1, 2011: turns 62 this year, already has 10+ years)
+  if (joinDate < cutoffDate && consecutiveYears >= 10 && age >= 61 && age < 62) {
+    if (isDateInCurrentBillingYear(age62Date)) {
+      return age62Date;
+    }
+  }
+  
+  // Standard rule (joined July 1, 2011 or after: turns 62 this year, already has 20+ years)
+  if (joinDate >= cutoffDate && consecutiveYears >= 20 && age >= 61 && age < 62) {
+    if (isDateInCurrentBillingYear(age62Date)) {
+      return age62Date;
+    }
+  }
+  
+  return null;
+}
+
 // Calculate billing for a member
-export function calculateBilling(member, settings, workHoursCompleted = 0) {
+export function calculateBilling(member, settings, workHoursCompleted = 0, hasActiveEncumbrance = false) {
   const result = {
     dues: 0,
     assessment: 0,
@@ -173,6 +242,10 @@ export function calculateBilling(member, settings, workHoursCompleted = 0) {
   const assessmentAmount = parseFloat(settings.assessment_amount || 50);
   const taxRate = parseFloat(settings.cabaret_tax_rate || 0.10);
   
+  // Check if member will become Life eligible THIS billing year
+  const lifeEligibilityDate = getLifeEligibilityDate(member, hasActiveEncumbrance);
+  const isBecomingLifeThisYear = lifeEligibilityDate && isDateInCurrentBillingYear(lifeEligibilityDate);
+  
   // For new members, calculate proration
   // For existing members, use full amounts
   // Billing year runs March 1 - Feb 28
@@ -199,13 +272,23 @@ export function calculateBilling(member, settings, workHoursCompleted = 0) {
     joinBillingYear = joinYear - 1;
   }
   
-  // If they joined this billing year, give prorated dues
+  // Determine if new member or becoming Life eligible this year
   const isNewMember = joinBillingYear === currentBillingYear;
   
   if (isNewMember) {
+    // New member proration
     result.dues = calculateProratedDues(baseDues, member.original_join_date);
     result.workHoursRequired = calculateProratedHours(baseHours, member.original_join_date);
+  } else if (isBecomingLifeThisYear) {
+    // Becoming Life eligible this year - prorate based on eligibility date
+    // They only pay for the portion of the year BEFORE they become Life eligible
+    const eligibilityQuarter = getFiscalQuarter(lifeEligibilityDate);
+    // Reverse proration: Q1 = 0% (eligible at start), Q2 = 25%, Q3 = 50%, Q4 = 75%
+    const reverseProration = { 1: 0, 2: 0.25, 3: 0.5, 4: 0.75 }[eligibilityQuarter] || 0;
+    result.dues = Math.round(baseDues * reverseProration * 100) / 100;
+    result.workHoursRequired = Math.round(baseHours * reverseProration * 10) / 10;
   } else {
+    // Regular member, full year
     result.dues = baseDues;
     result.workHoursRequired = baseHours;
   }
