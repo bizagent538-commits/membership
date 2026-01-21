@@ -265,6 +265,7 @@ export function generateImportTemplate() {
     'original_join_date': '07/01/2015',
     'tier': 'Regular (or Absentee, Life, Honorary, Waitlist)',
     'status': 'Active',
+    'key_fob_number': 'FOB-001',
     'email': 'john@example.com',
     'phone': '860-555-1234',
     'address_street': '123 Main St',
