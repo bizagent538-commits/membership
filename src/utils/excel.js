@@ -293,3 +293,28 @@ export function generateImportTemplate() {
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Import Template');
   XLSX.writeFile(workbook, 'member_import_template.xlsx');
 }
+export function exportMembersToExcel(members, filename = 'members.xlsx') {
+  const data = members.map(m => ({
+    'Member #': m.member_number,
+    'Last Name': m.last_name,
+    'First Name': m.first_name,
+    'Tier': m.tier,
+    'Status': m.status,
+    'Key Fob Number': m.key_fob_number || '',
+    'Email': m.email || '',
+    'Phone': m.phone || '',
+    'Address': m.address_street || '',
+    'City': m.address_city || '',
+    'State': m.address_state || '',
+    'ZIP': m.address_zip || '',
+    'Date of Birth': m.date_of_birth || '',
+    'Join Date': m.original_join_date || '',
+    'Assessment Years Completed': m.assessment_years_completed || 0,
+    'Notes': m.notes || ''
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Members');
+  XLSX.writeFile(workbook, filename);
+}
