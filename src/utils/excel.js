@@ -1,33 +1,10 @@
-// ============================================
-// EXCEL IMPORT FIX - ADD TO src/utils/excel.js
-// ============================================
-
-// ISSUE: key_fob_number and deceased members not importing correctly
-// 
-// Find the parseExcelFile function and update the field mapping section.
-// Look for where it maps Excel columns to member fields.
-
-// ADD THIS TO THE FIELD MAPPING (inside the row processing loop):
-
-// Key Fob Number - check multiple possible column names
-const keyFobNumber = row['key_fob_number'] || 
-                     row['Key Fob Number'] || 
-                     row['Key Fob'] || 
-                     row['KeyFob'] || 
-                     row['Fob Number'] || 
-                     row['fob_number'] ||
-                     row['FOB'] ||
-                     '';
-
-// Then add to the member object being created:
-// key_fob_number: keyFobNumber || null,
+import * as XLSX from 'xlsx';
 
 // ============================================
-// FULL UPDATED parseExcelFile FUNCTION
-// Replace the entire parseExcelFile function with this:
+// IMPORT FUNCTIONS
 // ============================================
 
-export async function parseExcelFile(file) {
+export async function parseImportedExcel(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     
@@ -40,16 +17,8 @@ export async function parseExcelFile(file) {
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
         
         const members = [];
-        const errors = [];
-        const warnings = [];
-        const memberNumbers = new Set();
         
         jsonData.forEach((row, index) => {
-          const rowNum = index + 2; // Excel row (1-indexed + header)
-          const rowErrors = [];
-          const rowWarnings = [];
-          
-          // Get values with flexible column name matching
           const memberNumber = row['member_number'] || row['Member Number'] || row['Member #'] || row['MemberNumber'] || row['member#'];
           const firstName = row['first_name'] || row['First Name'] || row['FirstName'] || row['first'];
           const lastName = row['last_name'] || row['Last Name'] || row['LastName'] || row['last'];
@@ -69,7 +38,6 @@ export async function parseExcelFile(file) {
           const encumbranceReason = row['encumbrance_reason'] || row['Encumbrance Reason'] || '';
           const notes = row['notes'] || row['Notes'] || row['Comments'] || '';
           
-          // KEY FOB NUMBER - check multiple possible column names
           const keyFobNumber = row['key_fob_number'] || 
                               row['Key Fob Number'] || 
                               row['Key Fob'] || 
@@ -86,7 +54,6 @@ export async function parseExcelFile(file) {
           const tierLower = (tier || '').toLowerCase();
           const statusLower = (status || '').toLowerCase();
           
-          // Handle "Deceased Member" as a tier (it's actually a status)
           if (tierLower.includes('deceased')) {
             normalizedTier = 'Regular';
             normalizedStatus = 'Deceased';
@@ -101,40 +68,23 @@ export async function parseExcelFile(file) {
           } else if (tierLower.includes('waitlist') || tierLower.includes('wait list')) {
             normalizedTier = 'Waitlist';
           } else {
-            normalizedTier = 'Regular'; // Default to Regular for unknown tiers
-            if (tier) rowWarnings.push(`Unknown tier "${tier}" - defaulting to Regular`);
+            normalizedTier = 'Regular';
           }
           
-          // Normalize status (only if not already set by tier processing)
           if (normalizedStatus === status) {
             if (statusLower.includes('active')) normalizedStatus = 'Active';
             else if (statusLower.includes('deceased')) normalizedStatus = 'Deceased';
             else if (statusLower.includes('resigned')) normalizedStatus = 'Resigned';
             else if (statusLower.includes('expelled')) normalizedStatus = 'Expelled';
-            else normalizedStatus = 'Active'; // Default to Active
+            else normalizedStatus = 'Active';
           }
           
-          // Parse dates
-          let parsedDOB = null;
-          let parsedJoinDate = null;
-          
-          if (dateOfBirth) {
-            parsedDOB = parseDate(dateOfBirth);
-            if (!parsedDOB) rowWarnings.push(`Invalid date of birth: ${dateOfBirth}`);
-          }
-          
-          if (joinDate) {
-            parsedJoinDate = parseDate(joinDate);
-            if (!parsedJoinDate) rowWarnings.push(`Invalid join date: ${joinDate}`);
-          }
-          
-          // Build member object
-          const member = {
+          members.push({
             member_number: memberNumber ? String(memberNumber).trim() : null,
             first_name: firstName ? String(firstName).trim() : null,
             last_name: lastName ? String(lastName).trim() : null,
-            date_of_birth: parsedDOB,
-            original_join_date: parsedJoinDate,
+            date_of_birth: dateOfBirth ? parseDate(dateOfBirth) : null,
+            original_join_date: joinDate ? parseDate(joinDate) : null,
             tier: normalizedTier,
             status: normalizedStatus,
             key_fob_number: keyFobNumber ? String(keyFobNumber).trim() : null,
@@ -149,55 +99,10 @@ export async function parseExcelFile(file) {
             encumbrance_date: encumbranceDate ? parseDate(encumbranceDate) : null,
             encumbrance_reason: encumbranceReason ? String(encumbranceReason).trim() : null,
             notes: notes ? String(notes).trim() : null
-          };
-          
-          // Required fields validation
-          if (!member.member_number) {
-            rowErrors.push('Missing member number');
-          } else if (memberNumbers.has(member.member_number)) {
-            rowErrors.push(`Duplicate member number: ${member.member_number}`);
-          } else {
-            memberNumbers.add(member.member_number);
-          }
-          
-          if (!member.first_name) rowErrors.push('Missing first name');
-          if (!member.last_name) rowErrors.push('Missing last name');
-          
-          // Dates are optional - use defaults if missing
-          if (!member.date_of_birth) {
-            rowWarnings.push('Missing date of birth - using 1900-01-01');
-            member.date_of_birth = '1900-01-01';
-          }
-          if (!member.original_join_date) {
-            rowWarnings.push('Missing join date - using 1900-01-01');
-            member.original_join_date = '1900-01-01';
-          }
-          
-          // Tier validation
-          if (!['Regular', 'Absentee', 'Life', 'Honorary', 'Waitlist'].includes(member.tier)) {
-            rowWarnings.push(`Unknown tier "${member.tier}" - defaulting to Regular`);
-            member.tier = 'Regular';
-          }
-          
-          // Status validation
-          if (!['Active', 'Deceased', 'Resigned', 'Expelled'].includes(member.status)) {
-            rowWarnings.push(`Unknown status "${member.status}" - defaulting to Active`);
-            member.status = 'Active';
-          }
-          
-          // Add to results
-          if (rowErrors.length > 0) {
-            errors.push({ row: rowNum, errors: rowErrors, data: row });
-          } else {
-            members.push(member);
-          }
-          
-          if (rowWarnings.length > 0) {
-            warnings.push({ row: rowNum, warnings: rowWarnings });
-          }
+          });
         });
         
-        resolve({ members, errors, warnings });
+        resolve(members);
       } catch (error) {
         reject(error);
       }
@@ -208,62 +113,50 @@ export async function parseExcelFile(file) {
   });
 }
 
-// ============================================
-// HELPER FUNCTION - Make sure this exists
-// ============================================
-
-function parseDate(dateValue) {
-  if (!dateValue) return null;
+export function validateImportedMembers(members) {
+  const valid = [];
+  const errors = [];
+  const warnings = [];
+  const memberNumbers = new Set();
   
-  // If it's already a Date object (from XLSX cellDates: true)
-  if (dateValue instanceof Date) {
-    // Format as YYYY-MM-DD, using LOCAL date to avoid timezone issues
-    const year = dateValue.getFullYear();
-    const month = String(dateValue.getMonth() + 1).padStart(2, '0');
-    const day = String(dateValue.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
+  members.forEach((member, index) => {
+    const rowNum = index + 2;
+    const rowErrors = [];
+    const rowWarnings = [];
+    
+    if (!member.member_number) {
+      rowErrors.push('Missing member number');
+    } else if (memberNumbers.has(member.member_number)) {
+      rowErrors.push(`Duplicate member number: ${member.member_number}`);
+    } else {
+      memberNumbers.add(member.member_number);
+    }
+    
+    if (!member.first_name) rowErrors.push('Missing first name');
+    if (!member.last_name) rowErrors.push('Missing last name');
+    
+    if (!member.date_of_birth) {
+      rowWarnings.push('Missing date of birth - using 1900-01-01');
+      member.date_of_birth = '1900-01-01';
+    }
+    if (!member.original_join_date) {
+      rowWarnings.push('Missing join date - using 1900-01-01');
+      member.original_join_date = '1900-01-01';
+    }
+    
+    if (rowErrors.length > 0) {
+      errors.push({ row: rowNum, member: `${member.last_name}, ${member.first_name}`, errors: rowErrors });
+    } else {
+      valid.push(member);
+    }
+    
+    if (rowWarnings.length > 0) {
+      warnings.push({ row: rowNum, member: `${member.last_name}, ${member.first_name}`, warnings: rowWarnings });
+    }
+  });
   
-  const str = String(dateValue).trim();
-  
-  // Try various date formats
-  // MM/DD/YYYY or M/D/YYYY
-  let match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (match) {
-    const [, month, day, year] = match;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-  
-  // MM-DD-YYYY or M-D-YYYY
-  match = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-  if (match) {
-    const [, month, day, year] = match;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-  
-  // YYYY-MM-DD (ISO format)
-  match = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (match) {
-    const [, year, month, day] = match;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-  
-  // Try native Date parsing as fallback
-  const date = new Date(str);
-  if (!isNaN(date.getTime())) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-  
-  return null;
+  return { valid, errors, warnings };
 }
-
-// ============================================
-// ALSO UPDATE generateImportTemplate()
-// Make sure key_fob_number is in the template
-// ============================================
 
 export function generateImportTemplate() {
   const template = [{
@@ -293,6 +186,11 @@ export function generateImportTemplate() {
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Import Template');
   XLSX.writeFile(workbook, 'member_import_template.xlsx');
 }
+
+// ============================================
+// EXPORT FUNCTIONS
+// ============================================
+
 export function exportMembersToExcel(members, filename = 'members.xlsx') {
   const data = members.map(m => ({
     'Member #': m.member_number,
@@ -317,4 +215,118 @@ export function exportMembersToExcel(members, filename = 'members.xlsx') {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Members');
   XLSX.writeFile(workbook, filename);
+}
+
+export function exportBillingReportToExcel(billingData, filename = 'billing_report.xlsx') {
+  const data = billingData.map(b => ({
+    'Member #': b.member_number,
+    'Name': `${b.last_name}, ${b.first_name}`,
+    'Tier': b.tier,
+    'Dues': b.dues || 0,
+    'Assessment': b.assessment || 0,
+    'Work Hours Short': b.workHoursShort || 0,
+    'Buyout': b.buyout || 0,
+    'Subtotal': b.subtotal || 0,
+    'Tax': b.tax || 0,
+    'Total': b.total || 0,
+    'Status': b.payment_status || 'Unpaid'
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Billing');
+  XLSX.writeFile(workbook, filename);
+}
+
+export function exportWorkHoursToExcel(workHoursData, filename = 'work_hours.xlsx') {
+  const data = workHoursData.map(w => ({
+    'Member #': w.member_number,
+    'Name': `${w.last_name}, ${w.first_name}`,
+    'Hours Required': w.hours_required || 10,
+    'Hours Completed': w.hours_completed || 0,
+    'Hours Short': w.hours_short || 0,
+    'Buyout Amount': w.buyout_amount || 0
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Work Hours');
+  XLSX.writeFile(workbook, filename);
+}
+
+export function exportWaitlistToExcel(waitlist, filename = 'waitlist.xlsx') {
+  const data = waitlist.map(w => ({
+    'Position': w.waitlist_position,
+    'Name': w.contact_name || `${w.last_name}, ${w.first_name}`,
+    'Email': w.email || '',
+    'Phone': w.phone || '',
+    'Address': w.street_address || '',
+    'City': w.city || '',
+    'State': w.state_province || '',
+    'ZIP': w.postal_code || '',
+    'Sponsor 1': w.sponsor_1 || '',
+    'Sponsor 2': w.sponsor_2 || '',
+    'Date Applied': w.date_application_received || '',
+    'Status': w.status || 'pending'
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Waitlist');
+  XLSX.writeFile(workbook, filename);
+}
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+function parseDate(dateValue) {
+  if (!dateValue) return null;
+  
+  if (dateValue instanceof Date) {
+    const year = dateValue.getFullYear();
+    const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+    const day = String(dateValue.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  
+  const str = String(dateValue).trim();
+  
+  let match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (match) {
+    const [, month, day, year] = match;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  
+  match = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (match) {
+    const [, month, day, year] = match;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  
+  match = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (match) {
+    const [, year, month, day] = match;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  
+  const date = new Date(str);
+  if (!isNaN(date.getTime())) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  
+  return null;
+}
+
+function formatDate(date) {
+  if (!date) return '';
+  const d = new Date(date);
+  return d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
 }
