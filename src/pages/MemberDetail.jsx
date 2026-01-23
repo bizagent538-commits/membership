@@ -226,7 +226,7 @@ export default function MemberDetail() {
           </div>
           <div className="detail-row">
             <span className="detail-label">Age</span>
-            <span className="detail-value">{age} years</span>
+            <span className="detail-value">{age !== null ? `${age} years` : 'Unknown'}</span>
           </div>
           <div className="detail-row">
             <span className="detail-label">Email</span>
