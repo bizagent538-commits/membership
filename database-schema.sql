@@ -168,6 +168,29 @@ CREATE TABLE work_hours (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+
+-- Waitlist table
+CREATE TABLE waitlist (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  waitlist_position INTEGER NOT NULL,
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  contact_name TEXT,
+  email TEXT,
+  phone TEXT,
+  street_address TEXT,
+  city TEXT,
+  state_province TEXT,
+  postal_code TEXT,
+  sponsor_1 TEXT,
+  sponsor_2 TEXT,
+  date_application_received DATE,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'converted')),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Admins table
 CREATE TABLE admins (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
