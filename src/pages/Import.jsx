@@ -40,6 +40,7 @@ export default function Import() {
     
     try {
       // Prepare all members for batch insert
+      // FIXED: Added key_fob_number to the insert object
       const membersToInsert = parseResult.valid.map(member => ({
         member_number: String(member.member_number),
         first_name: member.first_name,
@@ -48,6 +49,7 @@ export default function Import() {
         original_join_date: member.original_join_date,
         tier: member.tier,
         status: member.status,
+        key_fob_number: member.key_fob_number || null,  // <-- ADDED THIS LINE
         email: member.email || null,
         phone: member.phone || null,
         address_street: member.address_street || null,
@@ -157,11 +159,11 @@ export default function Import() {
             <li><strong>first_name</strong>, <strong>last_name</strong> - Member name</li>
             <li><strong>date_of_birth</strong> - Date format (MM/DD/YYYY)</li>
             <li><strong>original_join_date</strong> - Date format (MM/DD/YYYY)</li>
-            <li><strong>tier</strong> - Regular, Absentee, Life, Honorary, or Waitlist</li>
+            <li><strong>tier</strong> - Regular, Absentee, Life, Honorary, Waitlist, or Deceased Member</li>
             <li><strong>status</strong> - Active, Deceased, Resigned, or Expelled</li>
           </ul>
           <p style={{ color: '#6b7280' }}>
-            Optional columns: email, phone, address_street, address_city, address_state, address_zip, 
+            Optional columns: key_fob_number, email, phone, address_street, address_city, address_state, address_zip, 
             assessment_years_completed, has_encumbrance, encumbrance_date, encumbrance_reason, notes
           </p>
         </div>
@@ -286,6 +288,7 @@ export default function Import() {
                             <th>Join Date</th>
                             <th>Tier</th>
                             <th>Status</th>
+                            <th>Key Fob</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -297,6 +300,7 @@ export default function Import() {
                               <td>{m.original_join_date}</td>
                               <td>{m.tier}</td>
                               <td>{m.status}</td>
+                              <td>{m.key_fob_number || '-'}</td>
                             </tr>
                           ))}
                         </tbody>
