@@ -6,6 +6,20 @@ export default function WaitlistReport() {
   const [waitlist, setWaitlist] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [formData, setFormData] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    street_address: '',
+    city: '',
+    state_province: '',
+    postal_code: '',
+    sponsor_1: '',
+    sponsor_2: '',
+    date_application_received: new Date().toISOString().split('T')[0],
+    phone: ''
+  });
   const [stats, setStats] = useState({
     total: 0,
     avgWaitDays: 0,
@@ -194,6 +208,83 @@ export default function WaitlistReport() {
     window.URL.revokeObjectURL(url);
   };
 
+  const downloadTemplate = () => {
+    const headers = [
+      'First Name',
+      'Last Name',
+      'Email',
+      'Street Address',
+      'City',
+      'State/Province',
+      'Postal Code',
+      'Sponsor #1',
+      'Sponsor #2',
+      'Applied',
+      'Phone'
+    ];
+
+    const csv = headers.join(',');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'waitlist_import_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleManualAdd = async (e) => {
+    e.preventDefault();
+    
+    try {
+      const nextPosition = waitlist.length + 1;
+      const contactName = `${formData.first_name} ${formData.last_name}`.trim();
+      
+      const { error } = await supabase
+        .from('waitlist')
+        .insert({
+          waitlist_position: nextPosition,
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          contact_name: contactName,
+          email: formData.email,
+          phone: formData.phone,
+          street_address: formData.street_address,
+          city: formData.city,
+          state_province: formData.state_province,
+          postal_code: formData.postal_code,
+          sponsor_1: formData.sponsor_1,
+          sponsor_2: formData.sponsor_2,
+          date_application_received: formData.date_application_received,
+          status: 'pending'
+        });
+
+      if (error) throw error;
+
+      alert('Person added to waitlist successfully!');
+      setShowAddModal(false);
+      setFormData({
+        first_name: '',
+        last_name: '',
+        email: '',
+        street_address: '',
+        city: '',
+        state_province: '',
+        postal_code: '',
+        sponsor_1: '',
+        sponsor_2: '',
+        date_application_received: new Date().toISOString().split('T')[0],
+        phone: ''
+      });
+      loadWaitlist();
+    } catch (error) {
+      console.error('Error adding to waitlist:', error);
+      alert('Failed to add person to waitlist: ' + error.message);
+    }
+  };
+
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -216,14 +307,13 @@ export default function WaitlistReport() {
           row[h] = values[idx] || '';
         });
 
-        const firstName = row['first_name'] || row['first name'] || row['firstname'] || '';
-        const lastName = row['last_name'] || row['last name'] || row['lastname'] || '';
-        const fullName = row['contact_name'] || row['contact name'] || row['name'] || 
-                         (firstName && lastName ? `${firstName} ${lastName}` : firstName || lastName);
+        const firstName = row['first name'] || row['first_name'] || row['firstname'] || '';
+        const lastName = row['last name'] || row['last_name'] || row['lastname'] || '';
+        const fullName = (firstName && lastName ? `${firstName} ${lastName}` : firstName || lastName);
         
         // Parse date (handle MM/DD/YYYY or YYYY-MM-DD formats)
         let parsedDate = null;
-        const dateStr = row['date application received'] || row['date_application_received'] || row['date applied'] || '';
+        const dateStr = row['applied'] || row['date application received'] || row['date_application_received'] || row['date applied'] || '';
         if (dateStr) {
           // If format is MM/DD/YYYY, convert to YYYY-MM-DD
           if (dateStr.includes('/')) {
@@ -241,14 +331,15 @@ export default function WaitlistReport() {
         
         const entry = {
           waitlist_position: parseInt(row['position'] || row['waitlist_position']) || (waitlist.length + entries.length + 1),
+          first_name: firstName,
           last_name: lastName,
           contact_name: fullName,
           email: row['email'] || '',
           phone: row['phone'] || '',
-          street_address: row['street_address'] || row['street address'] || row['address'] || '',
+          street_address: row['street address'] || row['street_address'] || row['address'] || '',
           city: row['city'] || '',
-          state_province: row['state_province'] || row['state/province'] || row['state'] || '',
-          postal_code: row['postal_code'] || row['postal code'] || row['zip'] || '',
+          state_province: row['state/province'] || row['state_province'] || row['state'] || '',
+          postal_code: row['postal code'] || row['postal_code'] || row['zip'] || '',
           sponsor_1: row['sponsor #1'] || row['sponsor_1'] || row['sponsor 1'] || row['sponsor#1'] || '',
           sponsor_2: row['sponsor #2'] || row['sponsor_2'] || row['sponsor 2'] || row['sponsor#2'] || '',
           date_application_received: parsedDate,
@@ -316,6 +407,9 @@ export default function WaitlistReport() {
           <p style={{ color: '#6b7280' }}>Manage prospective members waiting for membership</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={downloadTemplate} className="btn btn-secondary">
+            <Download size={16} /> Download Template
+          </button>
           <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
             <Upload size={16} />
             {importing ? 'Importing...' : 'Import CSV'}
@@ -327,6 +421,9 @@ export default function WaitlistReport() {
               disabled={importing}
             />
           </label>
+          <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
+            + Add Person
+          </button>
           <button onClick={exportToExcel} className="btn btn-success">
             <Download size={16} /> Export
           </button>
@@ -465,6 +562,134 @@ export default function WaitlistReport() {
           </table>
         </div>
       </div>
+
+      {/* Add Person Modal */}
+      {showAddModal && (
+        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add Person to Waitlist</h2>
+              <button onClick={() => setShowAddModal(false)} className="btn btn-icon">×</button>
+            </div>
+            <form onSubmit={handleManualAdd}>
+              <div className="modal-body">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group">
+                    <label>First Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.first_name}
+                      onChange={(e) => setFormData({...formData, first_name: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Last Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.last_name}
+                      onChange={(e) => setFormData({...formData, last_name: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Email</label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({...formData, email: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Phone</label>
+                    <input
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                    <label>Street Address</label>
+                    <input
+                      type="text"
+                      value={formData.street_address}
+                      onChange={(e) => setFormData({...formData, street_address: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>City</label>
+                    <input
+                      type="text"
+                      value={formData.city}
+                      onChange={(e) => setFormData({...formData, city: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>State/Province</label>
+                    <input
+                      type="text"
+                      value={formData.state_province}
+                      onChange={(e) => setFormData({...formData, state_province: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Postal Code</label>
+                    <input
+                      type="text"
+                      value={formData.postal_code}
+                      onChange={(e) => setFormData({...formData, postal_code: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Sponsor #1</label>
+                    <input
+                      type="text"
+                      value={formData.sponsor_1}
+                      onChange={(e) => setFormData({...formData, sponsor_1: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Sponsor #2</label>
+                    <input
+                      type="text"
+                      value={formData.sponsor_2}
+                      onChange={(e) => setFormData({...formData, sponsor_2: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Date Applied *</label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.date_application_received}
+                      onChange={(e) => setFormData({...formData, date_application_received: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" onClick={() => setShowAddModal(false)} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Add to Waitlist
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
