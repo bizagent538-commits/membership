@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { ArrowUp, ArrowDown, Download, Trash2, Upload, Clock, Users } from 'lucide-react';
+import { ArrowUp, ArrowDown, Download, Trash2, Upload, Clock, Users, Edit } from 'lucide-react';
 
 export default function WaitlistReport() {
   const [waitlist, setWaitlist] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingEntry, setEditingEntry] = useState(null);
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -18,7 +20,8 @@ export default function WaitlistReport() {
     sponsor_1: '',
     sponsor_2: '',
     date_application_received: new Date().toISOString().split('T')[0],
-    phone: ''
+    phone: '',
+    status: 'pending'
   });
   const [stats, setStats] = useState({
     total: 0,
@@ -150,6 +153,80 @@ export default function WaitlistReport() {
     }
   };
 
+  const openEditModal = (entry) => {
+    setEditingEntry(entry);
+    setFormData({
+      first_name: entry.first_name || '',
+      last_name: entry.last_name || '',
+      email: entry.email || '',
+      street_address: entry.street_address || '',
+      city: entry.city || '',
+      state_province: entry.state_province || '',
+      postal_code: entry.postal_code || '',
+      sponsor_1: entry.sponsor_1 || '',
+      sponsor_2: entry.sponsor_2 || '',
+      date_application_received: entry.date_application_received || new Date().toISOString().split('T')[0],
+      phone: entry.phone || '',
+      status: entry.status || 'pending'
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    
+    try {
+      const contactName = `${formData.first_name} ${formData.last_name}`.trim();
+      
+      const { error } = await supabase
+        .from('waitlist')
+        .update({
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          contact_name: contactName,
+          email: formData.email,
+          phone: formData.phone,
+          street_address: formData.street_address,
+          city: formData.city,
+          state_province: formData.state_province,
+          postal_code: formData.postal_code,
+          sponsor_1: formData.sponsor_1,
+          sponsor_2: formData.sponsor_2,
+          date_application_received: formData.date_application_received,
+          status: formData.status
+        })
+        .eq('id', editingEntry.id);
+
+      if (error) throw error;
+
+      alert('Waitlist entry updated successfully!');
+      setShowEditModal(false);
+      setEditingEntry(null);
+      resetForm();
+      loadWaitlist();
+    } catch (error) {
+      console.error('Error updating waitlist entry:', error);
+      alert('Failed to update: ' + error.message);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      first_name: '',
+      last_name: '',
+      email: '',
+      street_address: '',
+      city: '',
+      state_province: '',
+      postal_code: '',
+      sponsor_1: '',
+      sponsor_2: '',
+      date_application_received: new Date().toISOString().split('T')[0],
+      phone: '',
+      status: 'pending'
+    });
+  };
+
   const exportToExcel = () => {
     const headers = [
       'Position',
@@ -265,19 +342,7 @@ export default function WaitlistReport() {
 
       alert('Person added to waitlist successfully!');
       setShowAddModal(false);
-      setFormData({
-        first_name: '',
-        last_name: '',
-        email: '',
-        street_address: '',
-        city: '',
-        state_province: '',
-        postal_code: '',
-        sponsor_1: '',
-        sponsor_2: '',
-        date_application_received: new Date().toISOString().split('T')[0],
-        phone: ''
-      });
+      resetForm();
       loadWaitlist();
     } catch (error) {
       console.error('Error adding to waitlist:', error);
@@ -484,7 +549,7 @@ export default function WaitlistReport() {
                 <th>Applied</th>
                 <th>Waiting</th>
                 <th>Status</th>
-                <th style={{ width: '100px' }}>Actions</th>
+                <th style={{ width: '140px' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -530,6 +595,13 @@ export default function WaitlistReport() {
                     <td>{getStatusBadge(entry.status)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          onClick={() => openEditModal(entry)}
+                          className="btn btn-sm btn-icon btn-secondary"
+                          title="Edit"
+                        >
+                          <Edit size={14} />
+                        </button>
                         <button
                           onClick={() => moveUp(entry)}
                           disabled={entry.waitlist_position === 1}
@@ -684,6 +756,146 @@ export default function WaitlistReport() {
                 </button>
                 <button type="submit" className="btn btn-primary">
                   Add to Waitlist
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Person Modal */}
+      {showEditModal && (
+        <div className="modal-overlay" onClick={() => { setShowEditModal(false); setEditingEntry(null); }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Edit Waitlist Entry</h2>
+              <button onClick={() => { setShowEditModal(false); setEditingEntry(null); }} className="btn btn-icon">×</button>
+            </div>
+            <form onSubmit={handleEditSubmit}>
+              <div className="modal-body">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group">
+                    <label>First Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.first_name}
+                      onChange={(e) => setFormData({...formData, first_name: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Last Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.last_name}
+                      onChange={(e) => setFormData({...formData, last_name: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Email</label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({...formData, email: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Phone</label>
+                    <input
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                    <label>Street Address</label>
+                    <input
+                      type="text"
+                      value={formData.street_address}
+                      onChange={(e) => setFormData({...formData, street_address: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>City</label>
+                    <input
+                      type="text"
+                      value={formData.city}
+                      onChange={(e) => setFormData({...formData, city: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>State/Province</label>
+                    <input
+                      type="text"
+                      value={formData.state_province}
+                      onChange={(e) => setFormData({...formData, state_province: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Postal Code</label>
+                    <input
+                      type="text"
+                      value={formData.postal_code}
+                      onChange={(e) => setFormData({...formData, postal_code: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Sponsor #1</label>
+                    <input
+                      type="text"
+                      value={formData.sponsor_1}
+                      onChange={(e) => setFormData({...formData, sponsor_1: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Sponsor #2</label>
+                    <input
+                      type="text"
+                      value={formData.sponsor_2}
+                      onChange={(e) => setFormData({...formData, sponsor_2: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Date Applied *</label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.date_application_received}
+                      onChange={(e) => setFormData({...formData, date_application_received: e.target.value})}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Status</label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) => setFormData({...formData, status: e.target.value})}
+                      className="form-control"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="contacted">Contacted</option>
+                      <option value="approved">Approved</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" onClick={() => { setShowEditModal(false); setEditingEntry(null); }} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Changes
                 </button>
               </div>
             </form>
