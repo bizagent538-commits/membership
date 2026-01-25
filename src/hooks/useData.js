@@ -185,8 +185,13 @@ export function useDashboardStats() {
         const byStatus = { Active: 0, Deceased: 0, Resigned: 0, Expelled: 0 };
         
         members.forEach(m => {
-          if (byTier[m.tier] !== undefined) byTier[m.tier]++;
+          // Count ALL members by status
           if (byStatus[m.status] !== undefined) byStatus[m.status]++;
+          
+          // FIX: Count ONLY ACTIVE members by tier
+          if (m.status === 'Active' && byTier[m.tier] !== undefined) {
+            byTier[m.tier]++;
+          }
         });
         
         let totalDue = 0;
