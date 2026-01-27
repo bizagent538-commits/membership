@@ -19,7 +19,8 @@ export default function Members() {
         m.first_name.toLowerCase().includes(search.toLowerCase()) ||
         m.last_name.toLowerCase().includes(search.toLowerCase()) ||
         m.member_number.toLowerCase().includes(search.toLowerCase()) ||
-        (m.email && m.email.toLowerCase().includes(search.toLowerCase()));
+        (m.email && m.email.toLowerCase().includes(search.toLowerCase())) ||
+        (m.key_fob_number && m.key_fob_number.toLowerCase().includes(search.toLowerCase()));
       
       const matchesTier = tierFilter === '' || m.tier === tierFilter;
       const matchesStatus = statusFilter === '' || m.status === statusFilter;
@@ -98,7 +99,7 @@ export default function Members() {
               <Search size={18} />
               <input
                 type="text"
-                placeholder="Search by name, member # or email..."
+                placeholder="Search by name, member #, email, or key fob..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
