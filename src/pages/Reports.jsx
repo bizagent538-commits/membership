@@ -178,13 +178,15 @@ export default function Reports() {
   const generateStatusSummary = () => {
     setGenerating('status');
     try {
-      // Count by tier and status
+      // Count by tier (Active only) and status (all)
       const tierCounts = { Regular: 0, Absentee: 0, Life: 0, Honorary: 0 };
       const statusCounts = { Active: 0, Deceased: 0, Resigned: 0, Expelled: 0 };
       
       members.forEach(m => {
-        if (tierCounts[m.tier] !== undefined) tierCounts[m.tier]++;
+        // Count ALL members by status
         if (statusCounts[m.status] !== undefined) statusCounts[m.status]++;
+        // Count ONLY ACTIVE members by tier
+        if (m.status === 'Active' && tierCounts[m.tier] !== undefined) tierCounts[m.tier]++;
       });
       
       const summaryData = [
@@ -326,19 +328,19 @@ export default function Reports() {
             </div>
             <div>
               <div style={{ fontSize: '13px', color: '#6b7280' }}>Regular</div>
-              <div style={{ fontSize: '24px', fontWeight: '700' }}>{members.filter(m => m.tier === 'Regular').length}</div>
+              <div style={{ fontSize: '24px', fontWeight: '700' }}>{members.filter(m => m.status === 'Active' && m.tier === 'Regular').length}</div>
             </div>
             <div>
               <div style={{ fontSize: '13px', color: '#6b7280' }}>Absentee</div>
-              <div style={{ fontSize: '24px', fontWeight: '700' }}>{members.filter(m => m.tier === 'Absentee').length}</div>
+              <div style={{ fontSize: '24px', fontWeight: '700' }}>{members.filter(m => m.status === 'Active' && m.tier === 'Absentee').length}</div>
             </div>
             <div>
               <div style={{ fontSize: '13px', color: '#6b7280' }}>Life</div>
-              <div style={{ fontSize: '24px', fontWeight: '700' }}>{members.filter(m => m.tier === 'Life').length}</div>
+              <div style={{ fontSize: '24px', fontWeight: '700' }}>{members.filter(m => m.status === 'Active' && m.tier === 'Life').length}</div>
             </div>
             <div>
               <div style={{ fontSize: '13px', color: '#6b7280' }}>Honorary</div>
-              <div style={{ fontSize: '24px', fontWeight: '700' }}>{members.filter(m => m.tier === 'Honorary').length}</div>
+              <div style={{ fontSize: '24px', fontWeight: '700' }}>{members.filter(m => m.status === 'Active' && m.tier === 'Honorary').length}</div>
             </div>
           </div>
         </div>

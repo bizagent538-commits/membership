@@ -284,7 +284,7 @@ export default function LifeEligibility() {
         </div>
         <div className="stat-card">
           <div className="stat-label">Current Life Members</div>
-          <div className="stat-value">{members?.filter(m => m.tier === 'Life').length || 0}</div>
+          <div className="stat-value">{members?.filter(m => m.status === 'Active' && m.tier === 'Life').length || 0}</div>
         </div>
       </div>
 
