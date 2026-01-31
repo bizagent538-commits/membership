@@ -486,7 +486,7 @@ export default function WaitlistReport() {
               disabled={importing}
             />
           </label>
-          <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
+          <button onClick={() => { resetForm(); setShowAddModal(true); }} className="btn btn-primary">
             + Add Person
           </button>
           <button onClick={exportToExcel} className="btn btn-success">
