@@ -1,5 +1,29 @@
 # Membership App Updates - January 2026
 
+## February 2026 Update
+
+### Added "Past" Member Status ✅
+
+Added "Past" as a new member status option across the entire application. This status is for members who are no longer active but didn't leave under negative circumstances (resigned, expelled, deceased).
+
+**Changes:**
+- Database schema: Added 'Past' to the status CHECK constraint
+- Member forms: Added 'Past' to all status dropdowns (create, edit, status change)
+- Members list: Added 'Past' filter option and blue badge styling (badge-info)
+- Member detail: Added 'Past' badge styling and status change option
+- Reports: Added 'Past' to status breakdown counts and summary exports
+- Dashboard stats: Added 'Past' to status count tracking
+- Import/Export: Added 'Past' to Excel import normalization and template hint
+- Delete confirmation: Updated suggestion text to mention Past as an alternative
+
+**Database Migration Required:**
+```sql
+ALTER TABLE members DROP CONSTRAINT members_status_check;
+ALTER TABLE members ADD CONSTRAINT members_status_check CHECK (status IN ('Active', 'Past', 'Deceased', 'Resigned', 'Expelled'));
+```
+
+---
+
 ## Summary of Changes
 
 This update includes bug fixes and new features discussed in previous conversations:

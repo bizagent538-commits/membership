@@ -38,7 +38,7 @@ CREATE TABLE members (
   address_zip TEXT,
   original_join_date DATE NOT NULL,
   tier TEXT NOT NULL CHECK (tier IN ('Regular', 'Absentee', 'Life', 'Honorary')),
-  status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Deceased', 'Resigned', 'Expelled')),
+  status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Past', 'Deceased', 'Resigned', 'Expelled')),
   assessment_years_completed INTEGER DEFAULT 0 CHECK (assessment_years_completed >= 0 AND assessment_years_completed <= 5),
   life_eligibility_override BOOLEAN DEFAULT FALSE,
   life_override_reason TEXT,
