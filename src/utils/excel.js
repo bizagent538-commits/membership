@@ -73,6 +73,7 @@ export async function parseImportedExcel(file) {
           
           if (normalizedStatus === status) {
             if (statusLower.includes('active')) normalizedStatus = 'Active';
+            else if (statusLower.includes('past')) normalizedStatus = 'Past';
             else if (statusLower.includes('deceased')) normalizedStatus = 'Deceased';
             else if (statusLower.includes('resigned')) normalizedStatus = 'Resigned';
             else if (statusLower.includes('expelled')) normalizedStatus = 'Expelled';
@@ -166,7 +167,7 @@ export function generateImportTemplate() {
     'date_of_birth': '03/15/1962',
     'original_join_date': '07/01/2015',
     'tier': 'Regular (or Absentee, Life, Honorary, Waitlist, Deceased Member)',
-    'status': 'Active (or Deceased, Resigned, Expelled)',
+    'status': 'Active (or Past, Deceased, Resigned, Expelled)',
     'key_fob_number': 'FOB-001',
     'email': 'john@example.com',
     'phone': '860-555-1234',
