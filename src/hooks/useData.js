@@ -182,7 +182,7 @@ export function useDashboardStats() {
       
       if (members) {
         const byTier = { Regular: 0, Absentee: 0, Life: 0, Honorary: 0 };
-        const byStatus = { Active: 0, Deceased: 0, Resigned: 0, Expelled: 0 };
+        const byStatus = { Active: 0, Past: 0, Deceased: 0, Resigned: 0, Expelled: 0 };
         
         members.forEach(m => {
           // Count ALL members by status
