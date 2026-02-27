@@ -79,6 +79,7 @@ export default function MemberDetail() {
   const getStatusBadgeClass = (status) => {
     switch (status) {
       case 'Active': return 'badge-success';
+      case 'Past': return 'badge-info';
       case 'Deceased': return 'badge-gray';
       case 'Resigned': return 'badge-warning';
       case 'Expelled': return 'badge-danger';
@@ -543,6 +544,7 @@ export default function MemberDetail() {
                   >
                     <option value="">Select status...</option>
                     <option value="Active">Active</option>
+                    <option value="Past">Past</option>
                     <option value="Deceased">Deceased</option>
                     <option value="Resigned">Resigned</option>
                     <option value="Expelled">Expelled</option>

@@ -180,7 +180,7 @@ export default function Reports() {
     try {
       // Count by tier (Active only) and status (all)
       const tierCounts = { Regular: 0, Absentee: 0, Life: 0, Honorary: 0 };
-      const statusCounts = { Active: 0, Deceased: 0, Resigned: 0, Expelled: 0 };
+      const statusCounts = { Active: 0, Past: 0, Deceased: 0, Resigned: 0, Expelled: 0 };
       
       members.forEach(m => {
         // Count ALL members by status
@@ -196,6 +196,7 @@ export default function Reports() {
         { Category: 'By Tier', Type: 'Honorary', Count: tierCounts.Honorary },
         { Category: '', Type: '', Count: '' },
         { Category: 'By Status', Type: 'Active', Count: statusCounts.Active },
+        { Category: 'By Status', Type: 'Past', Count: statusCounts.Past },
         { Category: 'By Status', Type: 'Deceased', Count: statusCounts.Deceased },
         { Category: 'By Status', Type: 'Resigned', Count: statusCounts.Resigned },
         { Category: 'By Status', Type: 'Expelled', Count: statusCounts.Expelled },
