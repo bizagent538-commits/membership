@@ -55,6 +55,7 @@ export default function Members() {
       case 'Honorary': return 'badge-info';
       case 'Regular': return 'badge-gray';
       case 'Absentee': return 'badge-warning';
+      case 'Past': return 'badge-gray';
       default: return 'badge-gray';
     }
   };
@@ -115,6 +116,7 @@ export default function Members() {
                 <option value="">All Tiers</option>
                 <option value="Regular">Regular</option>
                 <option value="Absentee">Absentee</option>
+                <option value="Past">Past</option>
                 <option value="Life">Life</option>
                 <option value="Honorary">Honorary</option>
               </select>

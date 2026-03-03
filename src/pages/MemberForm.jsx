@@ -346,6 +346,7 @@ export default function MemberForm() {
                 >
                   <option value="Regular">Regular</option>
                   <option value="Absentee">Absentee</option>
+                  <option value="Past">Past</option>
                   <option value="Life">Life</option>
                   <option value="Honorary">Honorary</option>
                   {!isEdit && <option value="Promote">Promote from Waitlist</option>}

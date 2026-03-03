@@ -71,6 +71,7 @@ export default function MemberDetail() {
       case 'Honorary': return 'badge-info';
       case 'Regular': return 'badge-gray';
       case 'Absentee': return 'badge-warning';
+      case 'Past': return 'badge-gray';
       case 'Waitlist': return 'badge-waitlist';
       default: return 'badge-gray';
     }
@@ -619,6 +620,7 @@ export default function MemberDetail() {
                     <option value="">Select tier...</option>
                     <option value="Regular">Regular</option>
                     <option value="Absentee">Absentee</option>
+                    <option value="Past">Past</option>
                     <option value="Life">Life</option>
                     <option value="Honorary">Honorary</option>
                     <option value="Waitlist">Waitlist</option>
