@@ -179,7 +179,7 @@ export default function Reports() {
     setGenerating('status');
     try {
       // Count by tier (Active only) and status (all)
-      const tierCounts = { Regular: 0, Absentee: 0, Life: 0, Honorary: 0 };
+      const tierCounts = { Regular: 0, Absentee: 0, Past: 0, Life: 0, Honorary: 0 };
       const statusCounts = { Active: 0, Past: 0, Deceased: 0, Resigned: 0, Expelled: 0 };
       
       members.forEach(m => {
