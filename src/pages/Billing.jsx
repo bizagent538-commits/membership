@@ -229,28 +229,83 @@ export default function Billing() {
   };
 
   const handleExport = () => {
-    const headers = ['Member #', 'Name', 'Tier', 'Dues', 'Assessment', 'Hours Required', 'Hours Completed', 'Hours Short', 'Buyout', 'Tax', 'Total', 'Status'];
-    const rows = generatedBills.map(b => [
-      b.member_number,
-      `"${b.last_name}, ${b.first_name}"`,
-      b.tier,
-      b.dues.toFixed(2),
-      (b.assessment || 0).toFixed(2),
-      b.workHoursRequired,
-      b.work_hours_completed,
-      b.work_hours_short,
-      (b.buyout || 0).toFixed(2),
-      (b.tax || 0).toFixed(2),
-      (b.total || 0).toFixed(2),
-      b.payment_status || 'Unpaid'
-    ]);
+    const headers = [
+      'ORDER_NUMBER','DATE_ISSUED','DATE_PAID','CURRENCY','STATUS','PAYMENT_TERMS',
+      'CUSTOMER_CODE','AMOUNT','AMOUNT_DISCOUNT','AMOUNT_SHIPPING','AMOUNT_TAX',
+      'COMMENTS','DISCOUNT_DETAILS','TAX_DETAILS','PURCHASE_ORDER_NUMBER',
+      'BILLING_CONTACT_NAME','BILLING_BUSINESS_NAME','BILLING_STREET1','BILLING_STREET2',
+      'BILLING_CITY','BILLING_PROVINCE','BILLING_COUNTRY','BILLING_POSTALCODE',
+      'BILLING_PHONE','BILLING_FAX','BILLING_EMAIL',
+      'SHIPPING_CONTACT_NAME','SHIPPING_BUSINESS_NAME','SHIPPING_STREET1','SHIPPING_STREET2',
+      'SHIPPING_CITY','SHIPPING_PROVINCE','SHIPPING_COUNTRY','SHIPPING_POSTALCODE',
+      'SHIPPING_PHONE','SHIPPING_FAX','SHIPPING_EMAIL'
+    ];
     
-    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const today = new Date();
+    const dateStr = `${today.getMonth()+1}/${today.getDate()}/${today.getFullYear()}`;
+    
+    // Helper to escape CSV field - wrap in quotes if contains comma, quote, or newline
+    const esc = (val) => {
+      const s = String(val || '');
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    };
+    
+    const rows = generatedBills.map(b => {
+      const paid = b.payment_status === 'Paid';
+      const tax = parseFloat(b.tax) || 0;
+      const total = parseFloat(b.total) || 0;
+      const subtotal = Math.max(0, total - tax);
+      
+      return [
+        `INV-${b.member_number}-${fiscalYear}`,
+        dateStr,
+        paid ? dateStr : '',
+        'USD',
+        paid ? 'Paid' : 'DUE',
+        '30 days',
+        b.member_number,
+        subtotal.toFixed(2),
+        '0.00',
+        '0.00',
+        tax.toFixed(2),
+        `Dues ${fiscalYear}`,
+        '',
+        'Cabaret Tax 10%',
+        '',
+        esc(`${b.first_name} ${b.last_name}`),
+        '',
+        esc(b.address_street || ''),
+        '',
+        esc(b.address_city || ''),
+        esc(b.address_state || ''),
+        'US',
+        b.address_zip || '',
+        b.phone || '',
+        '',
+        b.email || '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        ''
+      ].join(',');
+    });
+    
+    const csv = [headers.join(','), ...rows].join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `billing-${fiscalYear}.csv`;
+    a.download = `helcim-billing-${fiscalYear}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
