@@ -1,0 +1,754 @@
+import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { useMembers, useSettings } from '../hooks/useData';
+import { supabase } from '../lib/supabase';
+import { DollarSign, FileDown, Send, Check, Search, Upload } from 'lucide-react';
+import { 
+  formatCurrency, 
+  getCurrentFiscalYear, 
+  calculateBilling,
+  getCollectionPeriodStatus 
+} from '../utils/calculations';
+
+export default function Billing() {
+  const { members, loading: membersLoading } = useMembers();
+  const { settings, loading: settingsLoading } = useSettings();
+  const [membershipYears, setMembershipYears] = useState([]);
+  const [workHoursByMember, setWorkHoursByMember] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [sendingToHelcim, setSendingToHelcim] = useState(false);
+  const [helcimResults, setHelcimResults] = useState(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(null);
+  const [search, setSearch] = useState('');
+  const [tierFilter, setTierFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [paymentForm, setPaymentForm] = useState({
+    amount: '',
+    method: 'Check',
+    type: 'Combined',
+    check_number: '',
+    notes: ''
+  });
+
+  const fiscalYear = getCurrentFiscalYear();
+  const collectionStatus = getCollectionPeriodStatus();
+
+  useEffect(() => {
+    if (!membersLoading) {
+      fetchBillingData();
+    }
+  }, [membersLoading, fiscalYear]);
+
+  const fetchBillingData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch membership years for current fiscal year
+      const { data: years } = await supabase
+        .from('membership_years')
+        .select('*')
+        .eq('fiscal_year', fiscalYear);
+      
+      setMembershipYears(years || []);
+      
+      // Determine which work year to pull hours from
+      // Work year runs March 1 - Feb 28
+      // Billing runs April 1 - June (1st Wed)
+      // So we need LAST work year's hours for billing
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1; // 1-12
+      const currentYear = now.getFullYear();
+      
+      let workYearForBilling;
+      if (currentMonth >= 3) {
+        // March or later: use last year's work year (it just ended Feb 28)
+        workYearForBilling = `${currentYear - 1}-${currentYear}`;
+      } else {
+        // Jan-Feb: use the work year before that
+        workYearForBilling = `${currentYear - 2}-${currentYear - 1}`;
+      }
+      
+      // Fetch approved work hours for the billing work year
+      const { data: hours } = await supabase
+        .from('work_hours')
+        .select('member_id, hours_worked')
+        .eq('approved', true)
+        .eq('work_year', workYearForBilling);
+      
+      const hoursByMember = {};
+      (hours || []).forEach(h => {
+        if (!hoursByMember[h.member_id]) hoursByMember[h.member_id] = 0;
+        hoursByMember[h.member_id] += parseFloat(h.hours_worked);
+      });
+      setWorkHoursByMember(hoursByMember);
+      
+    } catch (err) {
+      console.error('Error fetching billing data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calculate billing for all active members
+  const billingData = useMemo(() => {
+    if (!members || !settings) return [];
+    
+    const activeMembers = members.filter(m => m.status === 'Active');
+    
+    const allBilling = activeMembers
+      .map(member => {
+        const workHours = workHoursByMember[member.id] || 0;
+        const billing = calculateBilling(member, settings, workHours);
+        const yearRecord = membershipYears.find(y => y.member_id === member.id);
+        
+        return {
+          ...member,
+          ...billing,
+          work_hours_completed: workHours,
+          work_hours_short: billing.workHoursShort,
+          payment_status: yearRecord?.payment_status || 'Unpaid',
+          total_paid: yearRecord?.total_paid || 0,
+          membership_year_id: yearRecord?.id
+        };
+      })
+      .filter(m => m.total > 0); // Only show members with bills
+    
+    // Apply search and filters
+    return allBilling.filter(bill => {
+      const matchesSearch = search === '' || 
+        bill.first_name.toLowerCase().includes(search.toLowerCase()) ||
+        bill.last_name.toLowerCase().includes(search.toLowerCase()) ||
+        bill.member_number.toLowerCase().includes(search.toLowerCase()) ||
+        (bill.email && bill.email.toLowerCase().includes(search.toLowerCase()));
+      
+      const matchesTier = tierFilter === '' || bill.tier === tierFilter;
+      const matchesStatus = statusFilter === '' || bill.payment_status === statusFilter;
+      
+      return matchesSearch && matchesTier && matchesStatus;
+    });
+  }, [members, settings, membershipYears, workHoursByMember, search, tierFilter, statusFilter]);
+
+  // Separate: only members with generated bills (for display after generation)
+  const generatedBills = useMemo(() => {
+    return billingData.filter(m => m.membership_year_id);
+  }, [billingData]);
+
+  const handleGenerateBills = async () => {
+    if (!confirm('Generate bills for all active members for fiscal year ' + fiscalYear + '?')) {
+      return;
+    }
+    
+    setGenerating(true);
+    try {
+      for (const bill of billingData) {
+        // Check if record already exists
+        const existing = membershipYears.find(y => y.member_id === bill.id);
+        
+        const yearData = {
+          member_id: bill.id,
+          fiscal_year: fiscalYear,
+          dues_owed: bill.dues,
+          assessment_owed: bill.assessment,
+          work_hours_required: bill.workHoursRequired,
+          work_hours_completed: bill.work_hours_completed,
+          work_hours_bought_out: bill.work_hours_short,
+          buyout_owed: bill.buyout,
+          tax_owed: bill.tax,
+          total_owed: bill.total,
+          payment_status: 'Unpaid'
+        };
+        
+        if (existing) {
+          await supabase
+            .from('membership_years')
+            .update(yearData)
+            .eq('id', existing.id);
+        } else {
+          await supabase
+            .from('membership_years')
+            .insert([yearData]);
+        }
+      }
+      
+      await fetchBillingData();
+      alert('Bills generated successfully!');
+    } catch (err) {
+      alert('Error generating bills: ' + err.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleRecordPayment = async (e) => {
+    e.preventDefault();
+    try {
+      const member = showPaymentModal;
+      const amount = parseFloat(paymentForm.amount);
+      
+      // Insert payment record
+      await supabase.from('payments').insert([{
+        member_id: member.id,
+        membership_year_id: member.membership_year_id,
+        fiscal_year: fiscalYear,
+        payment_date: new Date().toISOString().split('T')[0],
+        amount: amount,
+        payment_method: paymentForm.method,
+        payment_type: paymentForm.type,
+        check_number: paymentForm.check_number || null,
+        notes: paymentForm.notes || null
+      }]);
+      
+      // Update membership year
+      const newTotalPaid = (member.total_paid || 0) + amount;
+      const newStatus = newTotalPaid >= member.total ? 'Paid' : 
+                        newTotalPaid > 0 ? 'Partial' : 'Unpaid';
+      
+      if (member.membership_year_id) {
+        await supabase
+          .from('membership_years')
+          .update({
+            total_paid: newTotalPaid,
+            payment_status: newStatus
+          })
+          .eq('id', member.membership_year_id);
+      }
+      
+      // Update assessment years if fully paid
+      if (newStatus === 'Paid' && member.assessment > 0 && member.assessment_years_completed < 5) {
+        await supabase
+          .from('members')
+          .update({ assessment_years_completed: member.assessment_years_completed + 1 })
+          .eq('id', member.id);
+      }
+      
+      setShowPaymentModal(null);
+      setPaymentForm({ amount: '', method: 'Check', type: 'Combined', check_number: '', notes: '' });
+      await fetchBillingData();
+    } catch (err) {
+      alert('Error recording payment: ' + err.message);
+    }
+  };
+
+  const handleExport = () => {
+    const headers = [
+      'ORDER_NUMBER','DATE_ISSUED','DATE_PAID','CURRENCY','STATUS','PAYMENT_TERMS',
+      'CUSTOMER_CODE','AMOUNT','AMOUNT_DISCOUNT','AMOUNT_SHIPPING','AMOUNT_TAX',
+      'COMMENTS','DISCOUNT_DETAILS','TAX_DETAILS','PURCHASE_ORDER_NUMBER',
+      'BILLING_CONTACT_NAME','BILLING_BUSINESS_NAME','BILLING_STREET1','BILLING_STREET2',
+      'BILLING_CITY','BILLING_PROVINCE','BILLING_COUNTRY','BILLING_POSTALCODE',
+      'BILLING_PHONE','BILLING_FAX','BILLING_EMAIL',
+      'SHIPPING_CONTACT_NAME','SHIPPING_BUSINESS_NAME','SHIPPING_STREET1','SHIPPING_STREET2',
+      'SHIPPING_CITY','SHIPPING_PROVINCE','SHIPPING_COUNTRY','SHIPPING_POSTALCODE',
+      'SHIPPING_PHONE','SHIPPING_FAX','SHIPPING_EMAIL'
+    ];
+    
+    const today = new Date();
+    const dateStr = `${today.getMonth()+1}/${today.getDate()}/${today.getFullYear()}`;
+    
+    // Helper to escape CSV field - wrap in quotes if contains comma, quote, or newline
+    const esc = (val) => {
+      const s = String(val || '');
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    };
+    
+    const rows = generatedBills.map(b => {
+      const paid = b.payment_status === 'Paid';
+      const tax = parseFloat(b.tax) || 0;
+      const total = parseFloat(b.total) || 0;
+      const subtotal = Math.max(0, total - tax);
+      
+      return [
+        `INV-${b.member_number}-${fiscalYear}`,
+        dateStr,
+        paid ? dateStr : '',
+        'USD',
+        paid ? 'Paid' : 'DUE',
+        '30 days',
+        b.member_number,
+        subtotal.toFixed(2),
+        '0.00',
+        '0.00',
+        tax.toFixed(2),
+        `Dues ${fiscalYear}`,
+        '',
+        'Cabaret Tax 10%',
+        '',
+        esc(`${b.first_name} ${b.last_name}`),
+        '',
+        esc(b.address_street || ''),
+        '',
+        esc(b.address_city || ''),
+        esc(b.address_state || ''),
+        'US',
+        b.address_zip || '',
+        b.phone || '',
+        '',
+        b.email || '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        ''
+      ].join(',');
+    });
+    
+    const csv = [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `helcim-billing-${fiscalYear}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Members who already have invoices in Helcim (from first send)
+  const helcimExistingInvoices = new Set([
+    '471','486','498','569','763','768','791','812','864','913',
+    '936','939','969','993','1075','1105','1109','1189','1191','1192',
+    '1193','1212','1229','1249','1271','1272','1290','1291','1292','1310',
+    '1311','1343','1367','1373','1404','1422','1438','1440','1442','1465',
+    '1466','1467','1468','1471','1483','1485','1521','1547','1555','1588',
+    '1599','1606','1608','1640','1650','1660','1665','1673','1678','1692',
+    '1695','1700','1714','1718','1735','1739','1743','1755','1757','1762',
+    '1769','1787','1812','1833','1841','1845','1846','1849','1854','1855',
+    '1863','1864','1872','1874','1884','1887','1896','1910','1911','1912',
+    '1924','1929','1937','1942','1943','1946','1949','1955','1957','1962',
+    '1968','1971','1980','1984','1986','1994','1996','1997','2019','2023',
+    '2025','2041','2051','2056','2079','2087','2089','2093','2101','2102',
+    '2103','2104','2118','2135','2136','2137','2147','2148','2149','2157',
+    '2158'
+  ]);
+
+  const handleSendToHelcim = async (testMode = false) => {
+    const unpaidBills = generatedBills.filter(b => 
+      b.payment_status !== 'Paid' && !helcimExistingInvoices.has(b.member_number)
+    );
+    if (unpaidBills.length === 0) {
+      alert('No unpaid bills to send.');
+      return;
+    }
+    
+    const billsToSend = testMode ? [unpaidBills[0]] : unpaidBills;
+    
+    const msg = testMode 
+      ? `Send 1 TEST invoice to Helcim? (${unpaidBills[0].first_name} ${unpaidBills[0].last_name} #${unpaidBills[0].member_number})`
+      : `Send ${unpaidBills.length} unpaid invoices to Helcim in batches of 50?`;
+    
+    if (!confirm(msg)) return;
+    
+    setSendingToHelcim(true);
+    setHelcimResults(null);
+    
+    const totalResults = { success: 0, failed: 0, errors: [] };
+    const BATCH_SIZE = 50;
+    const totalBatches = Math.ceil(billsToSend.length / BATCH_SIZE);
+    
+    try {
+      for (let i = 0; i < billsToSend.length; i += BATCH_SIZE) {
+        const batch = billsToSend.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        
+        // Update UI with progress
+        setHelcimResults({ 
+          success: totalResults.success, 
+          failed: totalResults.failed, 
+          errors: totalResults.errors,
+          progress: `Sending batch ${batchNum} of ${totalBatches}...`
+        });
+
+        const billsPayload = batch.map(b => ({
+          member_number: b.member_number,
+          first_name: b.first_name,
+          last_name: b.last_name,
+          email: b.email || '',
+          phone: b.phone || '',
+          address_street: b.address_street || '',
+          address_city: b.address_city || '',
+          address_state: b.address_state || '',
+          address_zip: b.address_zip || '',
+          tier: b.tier,
+          fiscal_year: fiscalYear,
+          dues: b.dues || 0,
+          assessment: b.assessment || 0,
+          assessment_year_number: (b.assessment_years_completed || 0) + 1,
+          buyout: b.buyout || 0,
+          hours_short: b.work_hours_short || 0,
+          buyout_rate: parseFloat(settings.buyout_rate) || 20,
+          tax: b.tax || 0,
+          total: b.total || 0,
+        }));
+
+        const { data, error } = await supabase.functions.invoke('helcim-invoices', {
+          body: { action: 'create-invoices', bills: billsPayload },
+        });
+
+        if (error) throw error;
+        
+        totalResults.success += data.success || 0;
+        totalResults.failed += data.failed || 0;
+        if (data.errors) totalResults.errors.push(...data.errors);
+        
+        // Wait 2 seconds between batches to avoid rate limiting
+        if (i + BATCH_SIZE < billsToSend.length) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+      
+      setHelcimResults(totalResults);
+      
+      if (totalResults.success > 0 && totalResults.failed === 0) {
+        alert(`All ${totalResults.success} invoices sent to Helcim successfully!`);
+      } else if (totalResults.success > 0) {
+        alert(`${totalResults.success} invoices sent. ${totalResults.failed} failed. Check results below.`);
+      } else {
+        alert(`All ${totalResults.failed} invoices failed. Check results below.`);
+      }
+    } catch (err) {
+      alert('Error sending to Helcim: ' + err.message);
+    } finally {
+      setSendingToHelcim(false);
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'Paid': return 'badge-success';
+      case 'Partial': return 'badge-warning';
+      default: return 'badge-danger';
+    }
+  };
+
+  const totals = useMemo(() => {
+    return generatedBills.reduce((acc, b) => ({
+      dues: acc.dues + b.dues,
+      assessment: acc.assessment + b.assessment,
+      buyout: acc.buyout + b.buyout,
+      tax: acc.tax + b.tax,
+      total: acc.total + b.total,
+      paid: acc.paid + (b.total_paid || 0)
+    }), { dues: 0, assessment: 0, buyout: 0, tax: 0, total: 0, paid: 0 });
+  }, [generatedBills]);
+
+  if (loading || membersLoading || settingsLoading) {
+    return <div className="loading"><div className="spinner"></div></div>;
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: '700' }}>Billing</h1>
+          <p style={{ color: '#6b7280' }}>Fiscal Year {fiscalYear}</p>
+        </div>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button onClick={handleExport} className="btn btn-secondary" disabled={generatedBills.length === 0}>
+            <FileDown size={16} /> Export CSV
+          </button>
+          <button onClick={() => handleSendToHelcim(true)} className="btn btn-secondary" disabled={sendingToHelcim || generatedBills.length === 0}>
+            <Upload size={16} /> {sendingToHelcim ? 'Sending...' : 'Test Helcim (1)'}
+          </button>
+          <button onClick={() => handleSendToHelcim(false)} className="btn btn-secondary" disabled={sendingToHelcim || generatedBills.length === 0}>
+            <Upload size={16} /> {sendingToHelcim ? 'Sending...' : 'Send All to Helcim'}
+          </button>
+          <button onClick={handleGenerateBills} className="btn btn-primary" disabled={generating}>
+            <Send size={16} /> {generating ? 'Generating...' : 'Generate Bills'}
+          </button>
+        </div>
+      </div>
+
+      {/* Collection Status Alert */}
+      {collectionStatus.status === 'open' && (
+        <div className="alert alert-info" style={{ marginBottom: '24px' }}>
+          <DollarSign size={20} />
+          <div>
+            <strong>Collection Period Open</strong>
+            <p style={{ margin: 0 }}>{collectionStatus.message} — Deadline: {collectionStatus.deadline.toLocaleDateString()}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Helcim Results */}
+      {helcimResults && (
+        <div className={`alert ${helcimResults.failed > 0 ? 'alert-danger' : 'alert-success'}`} style={{ marginBottom: '24px' }}>
+          <div>
+            <strong>Helcim Import: {helcimResults.success} sent, {helcimResults.failed} failed</strong>
+            {helcimResults.progress && (
+              <div style={{ marginTop: '4px', fontSize: '13px', color: '#6b7280' }}>{helcimResults.progress}</div>
+            )}
+            {helcimResults.errors && helcimResults.errors.length > 0 && (
+              <div style={{ marginTop: '8px', fontSize: '13px' }}>
+                {helcimResults.errors.slice(0, 10).map((e, i) => (
+                  <div key={i}>#{e.member_number} {e.name}: {typeof e.error === 'string' ? e.error : JSON.stringify(e.error)}</div>
+                ))}
+                {helcimResults.errors.length > 10 && (
+                  <div>...and {helcimResults.errors.length - 10} more</div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Summary Cards */}
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-label">Total Billed</div>
+          <div className="stat-value">{formatCurrency(totals.total)}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Total Collected</div>
+          <div className="stat-value">{formatCurrency(totals.paid)}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Outstanding</div>
+          <div className="stat-value">{formatCurrency(totals.total - totals.paid)}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Members Billed</div>
+          <div className="stat-value">{generatedBills.length}</div>
+        </div>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="search-bar">
+        <div className="search-input">
+          <Search size={18} />
+          <input
+            type="text"
+            placeholder="Search by name, member # or email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="filter-group">
+          <select 
+            className="form-select" 
+            value={tierFilter} 
+            onChange={(e) => setTierFilter(e.target.value)}
+            style={{ width: 'auto' }}
+          >
+            <option value="">All Tiers</option>
+            <option value="Regular">Regular</option>
+            <option value="Absentee">Absentee</option>
+          </select>
+          <select 
+            className="form-select" 
+            value={statusFilter} 
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ width: 'auto' }}
+          >
+            <option value="">All Statuses</option>
+            <option value="Paid">Paid</option>
+            <option value="Partial">Partial</option>
+            <option value="Unpaid">Unpaid</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Billing Table */}
+      <div className="card">
+        <div className="card-body">
+          {generatedBills.length === 0 ? (
+            <div className="empty-state">
+              <DollarSign size={64} />
+              <h3>No bills generated yet</h3>
+              <p>Click "Generate Bills" to create bills for all active members</p>
+            </div>
+          ) : (
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Member</th>
+                    <th>Tier</th>
+                    <th>Dues</th>
+                    <th>Assessment</th>
+                    <th>Hours</th>
+                    <th>Buyout</th>
+                    <th>Tax</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {generatedBills.map(bill => (
+                    <tr key={bill.id}>
+                      <td>
+                        <Link to={`/members/${bill.id}`} style={{ color: '#2563eb', textDecoration: 'none' }}>
+                          {bill.last_name}, {bill.first_name}
+                        </Link>
+                        <div style={{ fontSize: '12px', color: '#6b7280' }}>#{bill.member_number}</div>
+                      </td>
+                      <td>{bill.tier}</td>
+                      <td>{formatCurrency(bill.dues)}</td>
+                      <td>
+                        {bill.assessment > 0 ? (
+                          formatCurrency(bill.assessment)
+                        ) : bill.assessment_years_completed < 5 ? (
+                          <span style={{ fontSize: '12px', color: '#6b7280' }}>—</span>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: '#059669' }}>✓ Complete</span>
+                        )}
+                      </td>
+                      <td>
+                        {bill.tier === 'Regular' ? (
+                          <span>{bill.work_hours_completed}/{bill.workHoursRequired}</span>
+                        ) : '—'}
+                      </td>
+                      <td>{bill.buyout > 0 ? formatCurrency(bill.buyout) : '—'}</td>
+                      <td>{formatCurrency(bill.tax)}</td>
+                      <td style={{ fontWeight: '600' }}>{formatCurrency(bill.total)}</td>
+                      <td>
+                        <span className={`badge ${getStatusBadge(bill.payment_status)}`}>
+                          {bill.payment_status}
+                        </span>
+                        {bill.total_paid > 0 && bill.payment_status !== 'Paid' && (
+                          <div style={{ fontSize: '11px', color: '#6b7280' }}>
+                            Paid: {formatCurrency(bill.total_paid)}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        {bill.payment_status !== 'Paid' && (
+                          <button 
+                            onClick={() => {
+                              setShowPaymentModal(bill);
+                              setPaymentForm(f => ({ ...f, amount: (bill.total - (bill.total_paid || 0)).toFixed(2) }));
+                            }} 
+                            className="btn btn-sm btn-success"
+                          >
+                            <Check size={14} /> Payment
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ fontWeight: '700', background: '#f3f4f6' }}>
+                    <td colSpan={2}>Totals</td>
+                    <td>{formatCurrency(totals.dues)}</td>
+                    <td>{formatCurrency(totals.assessment)}</td>
+                    <td>—</td>
+                    <td>{formatCurrency(totals.buyout)}</td>
+                    <td>{formatCurrency(totals.tax)}</td>
+                    <td>{formatCurrency(totals.total)}</td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Payment Modal */}
+      {showPaymentModal && (
+        <div className="modal-overlay" onClick={() => setShowPaymentModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Record Payment</h2>
+            </div>
+            <form onSubmit={handleRecordPayment}>
+              <div className="modal-body">
+                <p style={{ marginBottom: '16px' }}>
+                  Recording payment for <strong>{showPaymentModal.first_name} {showPaymentModal.last_name}</strong>
+                  <br />
+                  <span style={{ color: '#6b7280' }}>
+                    Total due: {formatCurrency(showPaymentModal.total)} | 
+                    Paid: {formatCurrency(showPaymentModal.total_paid || 0)} | 
+                    Remaining: {formatCurrency(showPaymentModal.total - (showPaymentModal.total_paid || 0))}
+                  </span>
+                </p>
+                
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Amount</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-input"
+                      value={paymentForm.amount}
+                      onChange={e => setPaymentForm(f => ({ ...f, amount: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Method</label>
+                    <select
+                      className="form-select"
+                      value={paymentForm.method}
+                      onChange={e => setPaymentForm(f => ({ ...f, method: e.target.value }))}
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="Check">Check</option>
+                      <option value="Credit Card">Credit Card</option>
+                    </select>
+                  </div>
+                </div>
+                
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Payment Type</label>
+                    <select
+                      className="form-select"
+                      value={paymentForm.type}
+                      onChange={e => setPaymentForm(f => ({ ...f, type: e.target.value }))}
+                    >
+                      <option value="Combined">Combined (All)</option>
+                      <option value="Dues">Dues Only</option>
+                      <option value="Assessment">Assessment Only</option>
+                      <option value="Buyout">Buyout Only</option>
+                      <option value="Tax">Tax Only</option>
+                    </select>
+                  </div>
+                  {paymentForm.method === 'Check' && (
+                    <div className="form-group">
+                      <label className="form-label">Check Number</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={paymentForm.check_number}
+                        onChange={e => setPaymentForm(f => ({ ...f, check_number: e.target.value }))}
+                      />
+                    </div>
+                  )}
+                </div>
+                
+                <div className="form-group">
+                  <label className="form-label">Notes</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={paymentForm.notes}
+                    onChange={e => setPaymentForm(f => ({ ...f, notes: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" onClick={() => setShowPaymentModal(null)} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-success">
+                  Record Payment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
