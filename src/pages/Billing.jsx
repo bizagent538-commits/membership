@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useMembers, useSettings } from '../hooks/useData';
 import { supabase } from '../lib/supabase';
-import { DollarSign, FileDown, Send, Check, Search } from 'lucide-react';
+import { DollarSign, FileDown, Send, Check, Search, Upload } from 'lucide-react';
 import { 
   formatCurrency, 
   getCurrentFiscalYear, 
@@ -17,6 +17,8 @@ export default function Billing() {
   const [workHoursByMember, setWorkHoursByMember] = useState({});
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [sendingToHelcim, setSendingToHelcim] = useState(false);
+  const [helcimResults, setHelcimResults] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(null);
   const [search, setSearch] = useState('');
   const [tierFilter, setTierFilter] = useState('');
@@ -310,6 +312,69 @@ export default function Billing() {
     URL.revokeObjectURL(url);
   };
 
+  const handleSendToHelcim = async (testMode = false) => {
+    const unpaidBills = generatedBills.filter(b => b.payment_status !== 'Paid');
+    if (unpaidBills.length === 0) {
+      alert('No unpaid bills to send.');
+      return;
+    }
+    
+    const billsToSend = testMode ? [unpaidBills[0]] : unpaidBills;
+    
+    const msg = testMode 
+      ? `Send 1 TEST invoice to Helcim? (${unpaidBills[0].first_name} ${unpaidBills[0].last_name} #${unpaidBills[0].member_number})`
+      : `Send ALL ${unpaidBills.length} unpaid invoices to Helcim? This cannot be easily undone.`;
+    
+    if (!confirm(msg)) return;
+    
+    setSendingToHelcim(true);
+    setHelcimResults(null);
+    
+    try {
+      const billsPayload = billsToSend.map(b => ({
+        member_number: b.member_number,
+        first_name: b.first_name,
+        last_name: b.last_name,
+        email: b.email || '',
+        phone: b.phone || '',
+        address_street: b.address_street || '',
+        address_city: b.address_city || '',
+        address_state: b.address_state || '',
+        address_zip: b.address_zip || '',
+        tier: b.tier,
+        fiscal_year: fiscalYear,
+        dues: b.dues || 0,
+        assessment: b.assessment || 0,
+        assessment_year_number: (b.assessment_years_completed || 0) + 1,
+        buyout: b.buyout || 0,
+        hours_short: b.work_hours_short || 0,
+        buyout_rate: parseFloat(settings.buyout_rate) || 20,
+        tax: b.tax || 0,
+        total: b.total || 0,
+      }));
+
+      const { data, error } = await supabase.functions.invoke('helcim-invoices', {
+        body: { action: 'create-invoices', bills: billsPayload },
+      });
+
+      if (error) throw error;
+      
+      setHelcimResults(data);
+      
+      if (data.success > 0 && data.failed === 0) {
+        alert(`All ${data.success} invoices sent to Helcim successfully!`);
+      } else if (data.success > 0) {
+        alert(`${data.success} invoices sent. ${data.failed} failed. Check results below.`);
+      } else {
+        alert(`All ${data.failed} invoices failed. Check results below.`);
+      }
+    } catch (err) {
+      alert('Error sending to Helcim: ' + err.message);
+    } finally {
+      setSendingToHelcim(false);
+    }
+  };
+
   const getStatusBadge = (status) => {
     switch (status) {
       case 'Paid': return 'badge-success';
@@ -341,8 +406,14 @@ export default function Billing() {
           <p style={{ color: '#6b7280' }}>Fiscal Year {fiscalYear}</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <button onClick={handleExport} className="btn btn-secondary">
-            <FileDown size={16} /> Export Excel
+          <button onClick={handleExport} className="btn btn-secondary" disabled={generatedBills.length === 0}>
+            <FileDown size={16} /> Export CSV
+          </button>
+          <button onClick={() => handleSendToHelcim(true)} className="btn btn-secondary" disabled={sendingToHelcim || generatedBills.length === 0}>
+            <Upload size={16} /> {sendingToHelcim ? 'Sending...' : 'Test Helcim (1)'}
+          </button>
+          <button onClick={() => handleSendToHelcim(false)} className="btn btn-secondary" disabled={sendingToHelcim || generatedBills.length === 0}>
+            <Upload size={16} /> {sendingToHelcim ? 'Sending...' : 'Send All to Helcim'}
           </button>
           <button onClick={handleGenerateBills} className="btn btn-primary" disabled={generating}>
             <Send size={16} /> {generating ? 'Generating...' : 'Generate Bills'}
@@ -357,6 +428,25 @@ export default function Billing() {
           <div>
             <strong>Collection Period Open</strong>
             <p style={{ margin: 0 }}>{collectionStatus.message} — Deadline: {collectionStatus.deadline.toLocaleDateString()}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Helcim Results */}
+      {helcimResults && (
+        <div className={`alert ${helcimResults.failed > 0 ? 'alert-danger' : 'alert-success'}`} style={{ marginBottom: '24px' }}>
+          <div>
+            <strong>Helcim Import: {helcimResults.success} sent, {helcimResults.failed} failed</strong>
+            {helcimResults.errors && helcimResults.errors.length > 0 && (
+              <div style={{ marginTop: '8px', fontSize: '13px' }}>
+                {helcimResults.errors.slice(0, 10).map((e, i) => (
+                  <div key={i}>#{e.member_number} {e.name}: {typeof e.error === 'string' ? e.error : JSON.stringify(e.error)}</div>
+                ))}
+                {helcimResults.errors.length > 10 && (
+                  <div>...and {helcimResults.errors.length - 10} more</div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
