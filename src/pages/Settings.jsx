@@ -12,6 +12,8 @@ export default function Settings() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePhrase, setDeletePhrase] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [showClearWorkHours, setShowClearWorkHours] = useState(false);
+  const [clearingWorkHours, setClearingWorkHours] = useState(false);
 
   const [form, setForm] = useState({});
 
@@ -42,6 +44,36 @@ export default function Settings() {
       setMessage('Error saving settings: ' + err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleClearAllWorkHours = async () => {
+    setClearingWorkHours(true);
+    try {
+      // Reset work_hours_completed to 0 on all membership_years records
+      const { error: myError } = await supabase
+        .from('membership_years')
+        .update({ work_hours_completed: 0 })
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      if (myError) throw myError;
+      
+      // Delete all individual work_hours entries
+      const { error: whError } = await supabase
+        .from('work_hours')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      if (whError) throw whError;
+      
+      setShowClearWorkHours(false);
+      alert('All work hours cleared successfully from all member cards.');
+      await refetchMembers();
+    } catch (err) {
+      console.error('Clear work hours error:', err);
+      alert('Error clearing work hours: ' + err.message);
+    } finally {
+      setClearingWorkHours(false);
     }
   };
 
@@ -318,10 +350,49 @@ export default function Settings() {
         <p>
           These actions are irreversible. Use with extreme caution.
         </p>
-        <button onClick={() => setShowDeleteConfirm(true)} className="btn btn-danger">
-          <Trash2 size={16} /> Delete All Data
-        </button>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <button onClick={() => setShowClearWorkHours(true)} className="btn btn-danger">
+            <Trash2 size={16} /> Clear All Work Hours
+          </button>
+          <button onClick={() => setShowDeleteConfirm(true)} className="btn btn-danger">
+            <Trash2 size={16} /> Delete All Data
+          </button>
+        </div>
       </div>
+
+      {/* Clear Work Hours Confirmation Modal */}
+      {showClearWorkHours && (
+        <div className="modal-overlay" onClick={() => setShowClearWorkHours(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ color: '#dc2626' }}>⚠️ Clear All Work Hours</h2>
+            </div>
+            <div className="modal-body">
+              <p>This will:</p>
+              <ul style={{ marginLeft: '20px', marginTop: '8px', marginBottom: '12px' }}>
+                <li>Reset <strong>work_hours_completed</strong> to 0 on all membership year records</li>
+                <li>Delete all individual <strong>work_hours</strong> entries</li>
+              </ul>
+              <p style={{ color: '#dc2626', fontWeight: '600' }}>
+                This is typically done at the start of a new work year (March 1) before importing fresh hours from the timeclock report.
+              </p>
+              <p style={{ marginTop: '12px' }}>Are you sure you want to proceed?</p>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setShowClearWorkHours(false)} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button 
+                onClick={handleClearAllWorkHours} 
+                className="btn btn-danger"
+                disabled={clearingWorkHours}
+              >
+                {clearingWorkHours ? 'Clearing...' : 'Yes, Clear All Work Hours'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
