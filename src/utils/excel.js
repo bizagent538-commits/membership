@@ -166,7 +166,7 @@ export function generateImportTemplate() {
     'last_name': 'Smith',
     'date_of_birth': '03/15/1962',
     'original_join_date': '07/01/2015',
-    'tier': 'Regular (or Absentee, Life, Honorary, Waitlist, Deceased Member)',
+    'tier': 'Regular (or Absentee, Past, Life, Honorary, Waitlist, Deceased Member)',
     'status': 'Active (or Past, Deceased, Resigned, Expelled)',
     'key_fob_number': 'FOB-001',
     'email': 'john@example.com',
