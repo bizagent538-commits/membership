@@ -9,7 +9,6 @@ import {
   calculateBilling,
   getCollectionPeriodStatus 
 } from '../utils/calculations';
-import { exportBillingReportToExcel } from '../utils/excel';
 
 export default function Billing() {
   const { members, loading: membersLoading } = useMembers();
@@ -230,24 +229,30 @@ export default function Billing() {
   };
 
   const handleExport = () => {
-    const exportData = generatedBills.map(b => ({
-      member_number: b.member_number,
-      first_name: b.first_name,
-      last_name: b.last_name,
-      tier: b.tier,
-      dues: b.dues,
-      assessment: b.assessment,
-      workHoursRequired: b.workHoursRequired,
-      work_hours_completed: b.work_hours_completed,
-      workHoursShort: b.work_hours_short,
-      buyout: b.buyout,
-      subtotal: b.subtotal,
-      tax: b.tax,
-      total: b.total,
-      payment_status: b.payment_status
-    }));
+    const headers = ['Member #', 'Name', 'Tier', 'Dues', 'Assessment', 'Hours Required', 'Hours Completed', 'Hours Short', 'Buyout', 'Tax', 'Total', 'Status'];
+    const rows = generatedBills.map(b => [
+      b.member_number,
+      `"${b.last_name}, ${b.first_name}"`,
+      b.tier,
+      b.dues.toFixed(2),
+      (b.assessment || 0).toFixed(2),
+      b.workHoursRequired,
+      b.work_hours_completed,
+      b.work_hours_short,
+      (b.buyout || 0).toFixed(2),
+      (b.tax || 0).toFixed(2),
+      (b.total || 0).toFixed(2),
+      b.payment_status || 'Unpaid'
+    ]);
     
-    exportBillingReportToExcel(exportData, `billing-${fiscalYear}.xlsx`);
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `billing-${fiscalYear}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const getStatusBadge = (status) => {
