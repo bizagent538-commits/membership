@@ -2,6 +2,13 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { ArrowUp, ArrowDown, Download, Trash2, Upload, Clock, Users, Edit } from 'lucide-react';
 
+function toLocalDateStr(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export default function WaitlistReport() {
   const [waitlist, setWaitlist] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -9,6 +16,8 @@ export default function WaitlistReport() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({ show: false, message: '', onConfirm: null });
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -19,15 +28,27 @@ export default function WaitlistReport() {
     postal_code: '',
     sponsor_1: '',
     sponsor_2: '',
-    date_application_received: new Date().toISOString().split('T')[0],
+    date_application_received: toLocalDateStr(),
     phone: '',
-    status: 'pending'
+    status: 'pending',
+    family_member_of_member: 'no',
+    related_member_name: '',
+    related_member_number: ''
   });
   const [stats, setStats] = useState({
     total: 0,
     avgWaitDays: 0,
     longestWaitDays: 0
   });
+
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
+  };
+
+  const showConfirm = (message, onConfirm) => {
+    setConfirmModal({ show: true, message, onConfirm });
+  };
 
   useEffect(() => {
     loadWaitlist();
@@ -96,7 +117,7 @@ export default function WaitlistReport() {
       loadWaitlist();
     } catch (error) {
       console.error('Error moving up:', error);
-      alert('Failed to reorder waitlist');
+      showToast('Failed to reorder waitlist', 'error');
     }
   };
 
@@ -120,37 +141,38 @@ export default function WaitlistReport() {
       loadWaitlist();
     } catch (error) {
       console.error('Error moving down:', error);
-      alert('Failed to reorder waitlist');
+      showToast('Failed to reorder waitlist', 'error');
     }
   };
 
-  const removeFromWaitlist = async (entry) => {
-    if (!confirm(`Remove ${entry.contact_name} from the waitlist?`)) return;
-
-    try {
-      const { error } = await supabase
-        .from('waitlist')
-        .delete()
-        .eq('id', entry.id);
-
-      if (error) throw error;
-
-      const remaining = waitlist
-        .filter(e => e.id !== entry.id)
-        .sort((a, b) => a.waitlist_position - b.waitlist_position);
-
-      for (let i = 0; i < remaining.length; i++) {
-        await supabase
+  const removeFromWaitlist = (entry) => {
+    showConfirm(`Remove ${entry.contact_name} from the waitlist?`, async () => {
+      try {
+        const { error } = await supabase
           .from('waitlist')
-          .update({ waitlist_position: i + 1 })
-          .eq('id', remaining[i].id);
-      }
+          .delete()
+          .eq('id', entry.id);
 
-      loadWaitlist();
-    } catch (error) {
-      console.error('Error removing from waitlist:', error);
-      alert('Failed to remove from waitlist');
-    }
+        if (error) throw error;
+
+        const remaining = waitlist
+          .filter(e => e.id !== entry.id)
+          .sort((a, b) => a.waitlist_position - b.waitlist_position);
+
+        for (let i = 0; i < remaining.length; i++) {
+          await supabase
+            .from('waitlist')
+            .update({ waitlist_position: i + 1 })
+            .eq('id', remaining[i].id);
+        }
+
+        showToast(`${entry.contact_name} removed from waitlist`);
+        loadWaitlist();
+      } catch (error) {
+        console.error('Error removing from waitlist:', error);
+        showToast('Failed to remove from waitlist', 'error');
+      }
+    });
   };
 
   const openEditModal = (entry) => {
@@ -165,9 +187,12 @@ export default function WaitlistReport() {
       postal_code: entry.postal_code || '',
       sponsor_1: entry.sponsor_1 || '',
       sponsor_2: entry.sponsor_2 || '',
-      date_application_received: entry.date_application_received || new Date().toISOString().split('T')[0],
+      date_application_received: entry.date_application_received || toLocalDateStr(),
       phone: entry.phone || '',
-      status: entry.status || 'pending'
+      status: entry.status || 'pending',
+      family_member_of_member: entry.family_member_of_member || 'no',
+      related_member_name: entry.related_member_name || '',
+      related_member_number: entry.related_member_number || ''
     });
     setShowEditModal(true);
   };
@@ -193,20 +218,23 @@ export default function WaitlistReport() {
           sponsor_1: formData.sponsor_1,
           sponsor_2: formData.sponsor_2,
           date_application_received: formData.date_application_received,
-          status: formData.status
+          status: formData.status,
+          family_member_of_member: formData.family_member_of_member,
+          related_member_name: formData.related_member_name,
+          related_member_number: formData.related_member_number
         })
         .eq('id', editingEntry.id);
 
       if (error) throw error;
 
-      alert('Waitlist entry updated successfully!');
+      showToast('Waitlist entry updated successfully!');
       setShowEditModal(false);
       setEditingEntry(null);
       resetForm();
       loadWaitlist();
     } catch (error) {
       console.error('Error updating waitlist entry:', error);
-      alert('Failed to update: ' + error.message);
+      showToast('Failed to update: ' + error.message, 'error');
     }
   };
 
@@ -221,9 +249,12 @@ export default function WaitlistReport() {
       postal_code: '',
       sponsor_1: '',
       sponsor_2: '',
-      date_application_received: new Date().toISOString().split('T')[0],
+      date_application_received: toLocalDateStr(),
       phone: '',
-      status: 'pending'
+      status: 'pending',
+      family_member_of_member: 'no',
+      related_member_name: '',
+      related_member_number: ''
     });
   };
 
@@ -316,13 +347,30 @@ export default function WaitlistReport() {
     e.preventDefault();
     
     try {
-      const nextPosition = waitlist.length + 1;
       const contactName = `${formData.first_name} ${formData.last_name}`.trim();
-      
+      const isPriority = formData.family_member_of_member === 'yes' &&
+        formData.related_member_name.trim() !== '' &&
+        formData.related_member_number.trim() !== '';
+
+      let insertPosition;
+
+      if (isPriority) {
+        // Shift all existing entries down by 1 to make room at position 1
+        for (let i = waitlist.length - 1; i >= 0; i--) {
+          await supabase
+            .from('waitlist')
+            .update({ waitlist_position: waitlist[i].waitlist_position + 1 })
+            .eq('id', waitlist[i].id);
+        }
+        insertPosition = 1;
+      } else {
+        insertPosition = waitlist.length + 1;
+      }
+
       const { error } = await supabase
         .from('waitlist')
         .insert({
-          waitlist_position: nextPosition,
+          waitlist_position: insertPosition,
           first_name: formData.first_name,
           last_name: formData.last_name,
           contact_name: contactName,
@@ -335,18 +383,26 @@ export default function WaitlistReport() {
           sponsor_1: formData.sponsor_1,
           sponsor_2: formData.sponsor_2,
           date_application_received: formData.date_application_received,
-          status: 'pending'
+          status: 'pending',
+          family_member_of_member: formData.family_member_of_member,
+          related_member_name: formData.related_member_name,
+          related_member_number: formData.related_member_number
         });
 
       if (error) throw error;
 
-      alert('Person added to waitlist successfully!');
+      showToast(isPriority
+        ? `${contactName} added to top of waitlist (family member priority)`
+        : `${contactName} added to waitlist`
+      );
       setShowAddModal(false);
       resetForm();
       loadWaitlist();
     } catch (error) {
       console.error('Error adding to waitlist:', error);
-      alert('Failed to add person to waitlist: ' + error.message);
+      showToast('Failed to add person to waitlist: ' + error.message, 'error');
+    }
+  };
     }
   };
 
@@ -427,12 +483,12 @@ export default function WaitlistReport() {
       if (entries.length > 0) {
         const { error } = await supabase.from('waitlist').insert(entries);
         if (error) throw error;
-        alert(`Imported ${entries.length} waitlist entries`);
+        showToast(`Imported ${entries.length} waitlist entries`);
         loadWaitlist();
       }
     } catch (error) {
       console.error('Import error:', error);
-      alert('Failed to import: ' + error.message);
+      showToast('Failed to import: ' + error.message, 'error');
     } finally {
       setImporting(false);
       e.target.value = '';
@@ -748,6 +804,60 @@ export default function WaitlistReport() {
                       className="form-control"
                     />
                   </div>
+                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                    <div style={{ borderTop: '1px solid var(--gray-200)', paddingTop: '16px', marginTop: '4px' }}>
+                      <label style={{ fontWeight: '600', fontSize: '14px' }}>Son, Daughter, or Spouse of a Member?</label>
+                      <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 'normal' }}>
+                          <input
+                            type="radio"
+                            name="add_family_member"
+                            value="no"
+                            checked={formData.family_member_of_member === 'no'}
+                            onChange={() => setFormData({...formData, family_member_of_member: 'no', related_member_name: '', related_member_number: ''})}
+                          /> No
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 'normal' }}>
+                          <input
+                            type="radio"
+                            name="add_family_member"
+                            value="yes"
+                            checked={formData.family_member_of_member === 'yes'}
+                            onChange={() => setFormData({...formData, family_member_of_member: 'yes'})}
+                          /> Yes
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  {formData.family_member_of_member === 'yes' && (
+                    <>
+                      <div className="form-group">
+                        <label>Member Name</label>
+                        <input
+                          type="text"
+                          value={formData.related_member_name}
+                          onChange={(e) => setFormData({...formData, related_member_name: e.target.value})}
+                          className="form-control"
+                          placeholder="Full name of member"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Member #</label>
+                        <input
+                          type="text"
+                          value={formData.related_member_number}
+                          onChange={(e) => setFormData({...formData, related_member_number: e.target.value})}
+                          className="form-control"
+                          placeholder="Member number"
+                        />
+                      </div>
+                      {formData.related_member_name.trim() && formData.related_member_number.trim() && (
+                        <div style={{ gridColumn: '1 / -1', background: 'var(--success-light)', border: '1px solid var(--success)', borderRadius: '6px', padding: '10px 14px', fontSize: '13px', color: 'var(--success)' }}>
+                          ★ This person will be added to the <strong>top of the waitlist</strong> (family member priority).
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
               <div className="modal-footer">
@@ -888,6 +998,55 @@ export default function WaitlistReport() {
                       <option value="approved">Approved</option>
                     </select>
                   </div>
+                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                    <div style={{ borderTop: '1px solid var(--gray-200)', paddingTop: '16px', marginTop: '4px' }}>
+                      <label style={{ fontWeight: '600', fontSize: '14px' }}>Son, Daughter, or Spouse of a Member?</label>
+                      <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 'normal' }}>
+                          <input
+                            type="radio"
+                            name="edit_family_member"
+                            value="no"
+                            checked={formData.family_member_of_member === 'no'}
+                            onChange={() => setFormData({...formData, family_member_of_member: 'no', related_member_name: '', related_member_number: ''})}
+                          /> No
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 'normal' }}>
+                          <input
+                            type="radio"
+                            name="edit_family_member"
+                            value="yes"
+                            checked={formData.family_member_of_member === 'yes'}
+                            onChange={() => setFormData({...formData, family_member_of_member: 'yes'})}
+                          /> Yes
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  {formData.family_member_of_member === 'yes' && (
+                    <>
+                      <div className="form-group">
+                        <label>Member Name</label>
+                        <input
+                          type="text"
+                          value={formData.related_member_name}
+                          onChange={(e) => setFormData({...formData, related_member_name: e.target.value})}
+                          className="form-control"
+                          placeholder="Full name of member"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Member #</label>
+                        <input
+                          type="text"
+                          value={formData.related_member_number}
+                          onChange={(e) => setFormData({...formData, related_member_number: e.target.value})}
+                          className="form-control"
+                          placeholder="Member number"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="modal-footer">
@@ -900,6 +1059,49 @@ export default function WaitlistReport() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Confirm Modal */}
+      {confirmModal.show && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="modal" style={{ maxWidth: '400px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Confirm</h2>
+            </div>
+            <div className="modal-body">
+              <p>{confirmModal.message}</p>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setConfirmModal({ show: false, message: '', onConfirm: null })}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={() => {
+                  setConfirmModal({ show: false, message: '', onConfirm: null });
+                  confirmModal.onConfirm?.();
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div style={{
+          position: 'fixed', bottom: '24px', right: '24px', zIndex: 99999,
+          background: toast.type === 'error' ? 'var(--danger)' : 'var(--success)',
+          color: '#fff', padding: '12px 20px', borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '14px', maxWidth: '360px'
+        }}>
+          {toast.message}
         </div>
       )}
     </div>
