@@ -83,7 +83,7 @@ export default function WaitlistReport() {
     const today = new Date();
     const waitDays = data.map(entry => {
       if (!entry.date_application_received) return 0;
-      const appDate = new Date(entry.date_application_received);
+      const appDate = new Date(entry.date_application_received + 'T00:00:00');
       const days = Math.floor((today - appDate) / (1000 * 60 * 60 * 24));
       return days;
     });
@@ -267,17 +267,20 @@ export default function WaitlistReport() {
     // Order | Contact Name | Date Application Received | Sponsor #1 | Sponsor #2 |
     // City | State/Province | Postal Code | Email | Phone | Street Address | Days Waiting | Status
     const data = waitlist.map(entry => {
-      const appDate = entry.date_application_received
+      const appDateObj = entry.date_application_received
         ? new Date(entry.date_application_received + 'T00:00:00')
         : null;
-      const daysWaiting = appDate
-        ? Math.floor((today - appDate) / (1000 * 60 * 60 * 24))
+      const daysWaiting = appDateObj
+        ? Math.floor((today - appDateObj) / (1000 * 60 * 60 * 24))
         : 0;
+      const appDateStr = appDateObj
+        ? `${appDateObj.getMonth() + 1}/${appDateObj.getDate()}/${appDateObj.getFullYear()}`
+        : '';
 
       return {
         'Order': entry.waitlist_position,
         'Contact Name': entry.contact_name || '',
-        'Date Application Received': appDate || '',
+        'Date Application Received': appDateStr,
         'Sponsor #1': entry.sponsor_1 || '',
         'Sponsor #2': entry.sponsor_2 || '',
         'City': entry.city || '',
@@ -511,7 +514,7 @@ export default function WaitlistReport() {
   const getDaysWaiting = (dateReceived) => {
     if (!dateReceived) return 0;
     const today = new Date();
-    const appDate = new Date(dateReceived);
+    const appDate = new Date(dateReceived + 'T00:00:00');
     return Math.floor((today - appDate) / (1000 * 60 * 60 * 24));
   };
 
@@ -655,7 +658,7 @@ export default function WaitlistReport() {
                     </td>
                     <td>
                       {entry.date_application_received
-                        ? new Date(entry.date_application_received).toLocaleDateString()
+                        ? new Date(entry.date_application_received + 'T00:00:00').toLocaleDateString()
                         : '-'}
                     </td>
                     <td style={{ fontWeight: '500' }}>

@@ -367,8 +367,6 @@ export default function MemberForm() {
                   <option value="Active">Active</option>
                   <option value="Past">Past</option>
                   <option value="Deceased">Deceased</option>
-                  <option value="Resigned">Resigned</option>
-                  <option value="Expelled">Expelled</option>
                 </select>
               </div>
               <div className="form-group">

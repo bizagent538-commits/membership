@@ -160,7 +160,7 @@ export default function Import() {
             <li><strong>date_of_birth</strong> - Date format (MM/DD/YYYY)</li>
             <li><strong>original_join_date</strong> - Date format (MM/DD/YYYY)</li>
             <li><strong>tier</strong> - Regular, Absentee, Past, Life, Honorary, Waitlist, or Deceased Member</li>
-            <li><strong>status</strong> - Active, Deceased, Resigned, or Expelled</li>
+            <li><strong>status</strong> - Active, Past, or Deceased</li>
           </ul>
           <p style={{ color: '#6b7280' }}>
             Optional columns: key_fob_number, email, phone, address_street, address_city, address_state, address_zip, 

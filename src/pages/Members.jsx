@@ -65,8 +65,6 @@ export default function Members() {
       case 'Active': return 'badge-success';
       case 'Past': return 'badge-info';
       case 'Deceased': return 'badge-gray';
-      case 'Resigned': return 'badge-warning';
-      case 'Expelled': return 'badge-danger';
       default: return 'badge-gray';
     }
   };
@@ -130,8 +128,6 @@ export default function Members() {
                 <option value="Active">Active</option>
                 <option value="Past">Past</option>
                 <option value="Deceased">Deceased</option>
-                <option value="Resigned">Resigned</option>
-                <option value="Expelled">Expelled</option>
               </select>
             </div>
           </div>
@@ -224,7 +220,7 @@ export default function Members() {
                 This will also delete all related records (payments, work hours, history). This action cannot be undone.
               </p>
               <p style={{ marginTop: '12px', color: '#6b7280' }}>
-                Consider changing their status to Past, Resigned or Expelled instead to preserve history.
+                Consider changing their status to Past or Deceased instead to preserve history.
               </p>
             </div>
             <div className="modal-footer">

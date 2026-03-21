@@ -82,8 +82,6 @@ export default function MemberDetail() {
       case 'Active': return 'badge-success';
       case 'Past': return 'badge-info';
       case 'Deceased': return 'badge-gray';
-      case 'Resigned': return 'badge-warning';
-      case 'Expelled': return 'badge-danger';
       default: return 'badge-gray';
     }
   };
@@ -129,17 +127,8 @@ export default function MemberDetail() {
         reason: statusForm.reason
       }]);
       
-      if (statusForm.status === 'Expelled') {
-        await supabase.from('expulsion_records').insert([{
-          member_id: id,
-          expulsion_date: new Date().toISOString().split('T')[0],
-          cause: statusForm.expulsion_cause,
-          financial_obligations_met: statusForm.financial_met
-        }]);
-      }
-      
       setShowStatusModal(false);
-      setStatusForm({ status: '', reason: '', expulsion_cause: '', financial_met: 'No' });
+      setStatusForm({ status: '', reason: '' });
       refetch();
     } catch (err) {
       alert('Error: ' + err.message);
@@ -547,8 +536,6 @@ export default function MemberDetail() {
                     <option value="Active">Active</option>
                     <option value="Past">Past</option>
                     <option value="Deceased">Deceased</option>
-                    <option value="Resigned">Resigned</option>
-                    <option value="Expelled">Expelled</option>
                   </select>
                 </div>
                 <div className="form-group">
@@ -560,32 +547,6 @@ export default function MemberDetail() {
                     rows={2}
                   />
                 </div>
-                {statusForm.status === 'Expelled' && (
-                  <>
-                    <div className="form-group">
-                      <label className="form-label">Expulsion Cause (Required)</label>
-                      <textarea
-                        className="form-textarea"
-                        value={statusForm.expulsion_cause}
-                        onChange={e => setStatusForm(f => ({ ...f, expulsion_cause: e.target.value }))}
-                        required
-                        rows={3}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Financial Obligations Met</label>
-                      <select
-                        className="form-select"
-                        value={statusForm.financial_met}
-                        onChange={e => setStatusForm(f => ({ ...f, financial_met: e.target.value }))}
-                      >
-                        <option value="Yes">Yes</option>
-                        <option value="No">No</option>
-                        <option value="Partial">Partial</option>
-                      </select>
-                    </div>
-                  </>
-                )}
               </div>
               <div className="modal-footer">
                 <button type="button" onClick={() => setShowStatusModal(false)} className="btn btn-secondary">
